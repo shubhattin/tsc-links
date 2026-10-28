@@ -1,0 +1,22 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "unicorn", "oxc", "import"],
+  "categories": {
+    "correctness": "error"
+  },
+  "rules": {
+    "unicorn/no-empty-file": "off"
+  },
+  "env": {
+    "builtin": true,
+    "browser": true,
+    "node": true
+  },
+  "ignorePatterns": [
+    "build/**",
+    ".svelte-kit/**",
+    "dist/**",
+    "src/lib/components/ui/**",
+    "src/lib/api/generated/**"
+  ]
+}

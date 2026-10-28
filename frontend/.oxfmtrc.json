@@ -1,0 +1,14 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "useTabs": false,
+  "tabWidth": 2,
+  "singleQuote": true,
+  "printWidth": 100,
+  "svelte": true,
+  "sortImports": true,
+  "sortTailwindcss": {
+    "stylesheet": "./src/routes/layout.css",
+    "functions": ["cn"]
+  },
+  "ignorePatterns": ["build/**", ".svelte-kit/**", "dist/**", "openapi/schema.json"]
+}

@@ -1,0 +1,52 @@
+[package]
+name = "tsc_links"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+axum = { version = "0.8" }
+dotenvy = "0.15"
+tokio = { version = "1", features = ["full"] }
+tower = { version = "0.5" }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1"
+chrono = { version = "0.4", features = ["serde"] }
+nanoid = "0.4"
+sea-orm = { version = "2.0", default-features = false, features = [
+    "macros",
+    "runtime-tokio-rustls",
+    "sqlx-postgres",
+    "with-chrono",
+] }
+redis = { version = "1.8", default-features = false, features = [
+    "tokio-rustls-comp",
+    "tls-rustls-webpki-roots",
+    "connection-manager",
+] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+url = "2"
+utoipa = { version = "5", features = ["axum_extras", "macros"] }
+utoipa-axum = "0.2"
+vercel_runtime = { version = "2", features = ["axum"] }
+
+[[bin]]
+name = "main"
+path = "src/main.rs"
+
+[[bin]]
+name = "vercel"
+path = "api/vercel.rs"
+
+[[bin]]
+name = "gen-openapi"
+path = "src/bin/gen_openapi.rs"
+
+[workspace]
+members = ["migration"]
+resolver = "3"
+
+[profile.release]
+codegen-units = 1
+lto = "fat"
+opt-level = 3

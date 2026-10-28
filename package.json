@@ -1,0 +1,20 @@
+{
+	"name": "tsc-links",
+	"version": "0.0.1",
+	"private": true,
+	"workspaces": [
+		"frontend",
+		"schema"
+	],
+	"type": "module",
+	"scripts": {
+		"dev": "bun run --cwd frontend dev",
+		"dev:api": "cargo watch -w src/ -x 'run --bin main'",
+		"sync-api": "bash scripts/sync-api.sh",
+		"migrate": "cargo run -p migration --",
+		"build": "bun run --cwd frontend build",
+		"check": "bun run --cwd frontend check",
+		"lint": "bun run --cwd frontend lint",
+		"format": "cargo fmt --all && bun run --cwd frontend format"
+	}
+}
