@@ -18,6 +18,7 @@
   import { replaceLinkInCache } from '$lib/links-cache';
   import { queryClient } from '$lib/query-client';
   import Link2Off from '@lucide/svelte/icons/link-2-off';
+  import Plus from '@lucide/svelte/icons/plus';
   import RefreshCw from '@lucide/svelte/icons/refresh-cw';
   import Search from '@lucide/svelte/icons/search';
   import TriangleAlert from '@lucide/svelte/icons/triangle-alert';
@@ -28,6 +29,8 @@
     () => ({ queryKey: LINKS_QUERY_KEY, queryFn: listLinks, staleTime: 30_000 }),
     () => queryClient,
   );
+
+  let { onAdd }: { onAdd: () => void } = $props();
 
   let search = $state('');
   let searchInput = $state<HTMLInputElement | null>(null);
@@ -115,6 +118,7 @@
       >
         <RefreshCw class={query.isFetching ? 'animate-spin motion-reduce:animate-none' : ''} />
       </Button>
+      <Button onclick={onAdd}><Plus /> Shorten</Button>
     </div>
   </div>
 
@@ -145,8 +149,9 @@
         <EmptyHeader>
           <EmptyMedia variant="icon"><Link2Off /></EmptyMedia>
           <EmptyTitle>No links yet</EmptyTitle>
-          <EmptyDescription>Shorten your first URL above — it shows up here.</EmptyDescription>
+          <EmptyDescription>Shorten your first URL to get started.</EmptyDescription>
         </EmptyHeader>
+        <Button onclick={onAdd}><Plus /> Shorten a link</Button>
       </Empty>
     {:else if filtered.length === 0}
       <Empty class="py-12">
