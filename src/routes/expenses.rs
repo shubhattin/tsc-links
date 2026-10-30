@@ -41,10 +41,14 @@ use crate::state::AppState;
 const LABEL_MAX_LEN: usize = 120;
 const NAME_MAX_LEN: usize = 64;
 const DESC_MAX_LEN: usize = 2000;
-/// Raw invoice uploads are capped (Vercel function payloads are small anyway).
-const INVOICE_MAX_BYTES: usize = 8 * 1024 * 1024;
+/// Raw invoice uploads are capped. 4 MiB keeps us under Vercel's ~4.5 MB
+/// function payload ceiling (prod) with multipart overhead to spare.
+const INVOICE_MAX_BYTES: usize = 4 * 1024 * 1024;
 /// Uploaded images are downscaled to this bounding box before webp encoding.
 const INVOICE_IMAGE_MAX_DIM: u32 = 2048;
+/// Header-only decode guard: inputs claiming more pixels than this are
+/// rejected before full decode (decompression-bomb protection).
+const INVOICE_IMAGE_MAX_PIXELS: u64 = 100_000_000;
 
 /// `PUT` invoice accepts these; images become webp, PDFs are stored raw.
 const IMAGE_MIMES: &[&str] = &["image/png", "image/jpeg", "image/webp"];
@@ -137,6 +141,10 @@ fn normalize_description(raw: Option<&str>) -> Result<Option<String>, String> {
 }
 
 /// Link routes with OpenAPI path registration.
+///
+/// axum's 2 MiB `DefaultBodyLimit` would 413 invoice uploads before our own
+/// cap runs, so the expenses router lifts it to just above the invoice cap.
+/// (JSON endpoints keep working — oversized bodies fail serde/validation.)
 pub fn openapi_router() -> OpenApiRouter<AppState> {
   OpenApiRouter::new()
     .routes(routes!(list_sources, create_source))
@@ -144,6 +152,10 @@ pub fn openapi_router() -> OpenApiRouter<AppState> {
     .routes(routes!(list_expenses, create_expense))
     .routes(routes!(update_expense, delete_expense))
     .routes(routes!(upload_invoice, download_invoice, delete_invoice))
+    .route_layer(axum::extract::DefaultBodyLimit::disable())
+    .route_layer(tower_http::limit::RequestBodyLimitLayer::new(
+      INVOICE_MAX_BYTES + 64 * 1024,
+    ))
 }
 
 /// `GET /api/expense-sources` — every source, alphabetical by name.
@@ -621,7 +633,7 @@ pub async fn create_expense(
 
   let now = chrono::Utc::now().fixed_offset();
   let model = expense::ActiveModel {
-    source_key: Set(source_key),
+    source_key: Set(source_key.clone()),
     date: Set(date),
     label: Set(label),
     usd_cents: Set(usd_cents),
@@ -640,6 +652,12 @@ pub async fn create_expense(
         Err(e) => internal_error(e),
       }
     }
+    // Microscopic race: source deleted between the lookup above and the
+    // insert. Report it as a bad source, not a 500.
+    Err(e) if is_fk_violation(&e) => error_response(
+      StatusCode::BAD_REQUEST,
+      format!("unknown expense source '{source_key}'"),
+    ),
     Err(e) => internal_error(e),
   }
 }
@@ -784,7 +802,24 @@ async fn find_expense(state: &AppState, id: i64) -> Result<expense::Model, Respo
 /// Decode an uploaded image and re-encode it as (lossless) webp, downscaled
 /// to a bounded size. `image` 0.25 only ships a lossless webp encoder —
 /// plenty for invoice screenshots at a fraction of PNG size.
+///
+/// Dimensions are read from the headers *before* full decode so a crafted
+/// small file claiming gigapixels (decompression bomb) is rejected without
+/// the multi-gigabyte allocation.
 fn image_to_webp(bytes: &[u8]) -> Result<Vec<u8>, String> {
+  let (width, height) = image::ImageReader::new(std::io::Cursor::new(bytes))
+    .with_guessed_format()
+    .map_err(|_| "could not decode image".to_string())?
+    .into_dimensions()
+    .map_err(|_| "could not decode image".to_string())?;
+  if width == 0
+    || height == 0
+    || width > INVOICE_IMAGE_MAX_DIM * 8
+    || height > INVOICE_IMAGE_MAX_DIM * 8
+    || width as u64 * height as u64 > INVOICE_IMAGE_MAX_PIXELS
+  {
+    return Err("image dimensions are too large".to_string());
+  }
   let img = image::load_from_memory(bytes).map_err(|_| "could not decode image".to_string())?;
   let img = if img.width() > INVOICE_IMAGE_MAX_DIM || img.height() > INVOICE_IMAGE_MAX_DIM {
     img.thumbnail(INVOICE_IMAGE_MAX_DIM, INVOICE_IMAGE_MAX_DIM)
@@ -801,7 +836,7 @@ fn image_to_webp(bytes: &[u8]) -> Result<Vec<u8>, String> {
 }
 
 /// `PUT /api/expenses/{id}/invoice` — attach an invoice (`multipart` `file`
-/// field: PNG/JPEG/WebP image → webp, or PDF as-is; max 8 MiB).
+/// field: PNG/JPEG/WebP image → webp, or PDF as-is; max 4 MiB).
 #[utoipa::path(
     put,
     path = "/api/expenses/{id}/invoice",
@@ -854,7 +889,7 @@ pub async fn upload_invoice(
   if bytes.len() > INVOICE_MAX_BYTES {
     return error_response(
       StatusCode::PAYLOAD_TOO_LARGE,
-      "invoice must be at most 8 MiB",
+      "invoice must be at most 4 MiB",
     );
   }
   if bytes.is_empty() {
@@ -863,14 +898,26 @@ pub async fn upload_invoice(
 
   let (store_mime, store_bytes, store_name) = if IMAGE_MIMES.contains(&mime.as_str()) {
     match image_to_webp(&bytes) {
-      Ok(webp) => (
-        "image/webp".to_string(),
-        webp,
-        webp_file_name(&name),
-      ),
+      Ok(webp) => {
+        if webp.len() > INVOICE_MAX_BYTES {
+          return error_response(
+            StatusCode::PAYLOAD_TOO_LARGE,
+            "re-encoded invoice exceeds 4 MiB",
+          );
+        }
+        ("image/webp".to_string(), webp, webp_file_name(&name))
+      }
       Err(msg) => return bad_request(msg),
     }
   } else if mime == "application/pdf" {
+    // The multipart content-type is client-supplied; verify the magic so a
+    // renamed binary isn't stored (and later served) as a PDF.
+    if !is_probably_pdf(&bytes) {
+      return error_response(
+        StatusCode::UNSUPPORTED_MEDIA_TYPE,
+        "file does not look like a PDF",
+      );
+    }
     (mime, bytes, sanitize_file_name(&name))
   } else {
     return error_response(
@@ -897,6 +944,11 @@ pub async fn upload_invoice(
   }
 }
 
+/// Magic-byte sniff for uploads claiming to be PDF.
+fn is_probably_pdf(bytes: &[u8]) -> bool {
+  bytes.starts_with(b"%PDF-")
+}
+
 /// `photo.PNG` → `photo.webp`; overlong names are truncated.
 fn webp_file_name(name: &str) -> String {
   let base = sanitize_file_name(name);
@@ -905,11 +957,19 @@ fn webp_file_name(name: &str) -> String {
 }
 
 fn sanitize_file_name(name: &str) -> String {
+  // `"` would break out of the quoted `filename="…"` download header;
+  // slashes and control chars have no business in a bare filename.
   let clean: String = name
     .trim()
     .chars()
     .take(240)
-    .map(|c| if c.is_control() || c == '/' || c == '\\' { '_' } else { c })
+    .map(|c| {
+      if c.is_control() || c == '/' || c == '\\' || c == '"' {
+        '_'
+      } else {
+        c
+      }
+    })
     .collect();
   if clean.is_empty() {
     "invoice".to_string()
@@ -941,13 +1001,26 @@ pub async fn download_invoice(State(state): State<AppState>, Path(id): Path<i64>
   match (row.invoice_blob.clone(), row.invoice_mime.clone()) {
     (Some(bytes), Some(mime)) => {
       let mut headers = HeaderMap::new();
-      if let (Ok(content_type), Ok(disposition)) = (
-        mime.parse::<header::HeaderValue>(),
-        format!("inline; filename=\"{}\"", row.invoice_name.as_deref().unwrap_or("invoice"))
-          .parse::<header::HeaderValue>(),
-      ) {
+      // Stored names are sanitized on upload, but a non-ASCII name still
+      // fails `HeaderValue` parsing — fall back to a bare filename rather
+      // than dropping the content headers entirely.
+      let disposition = format!(
+        "inline; filename=\"{}\"",
+        row.invoice_name.as_deref().unwrap_or("invoice")
+      )
+      .parse::<header::HeaderValue>()
+      .or_else(|_| "inline; filename=\"invoice\"".parse::<header::HeaderValue>());
+      if let (Ok(content_type), Ok(disposition)) =
+        (mime.parse::<header::HeaderValue>(), disposition)
+      {
         headers.insert(header::CONTENT_TYPE, content_type);
         headers.insert(header::CONTENT_DISPOSITION, disposition);
+        // Uploaded bytes are served from our own origin (admin-only both
+        // sides) — nosniff keeps browsers from MIME-sniffing them.
+        headers.insert(
+          header::X_CONTENT_TYPE_OPTIONS,
+          header::HeaderValue::from_static("nosniff"),
+        );
       }
       (headers, bytes).into_response()
     }
@@ -1057,5 +1130,31 @@ mod tests {
     assert_eq!(normalize_money(0, "inr_paise").unwrap(), 0);
     assert_eq!(normalize_label(Some("  ")).unwrap(), None);
     assert!(normalize_label(Some(&"x".repeat(121))).is_err());
+  }
+
+  #[test]
+  fn invoice_guards() {
+    // Quotes would break out of the quoted download `filename="…"`.
+    assert_eq!(sanitize_file_name("a\"b;.pdf"), "a_b;.pdf");
+    assert_eq!(sanitize_file_name("  /\\ "), "__");
+    assert_eq!(sanitize_file_name(""), "invoice");
+    assert_eq!(sanitize_file_name(&"x".repeat(300)).chars().count(), 240);
+    assert_eq!(webp_file_name("photo.PNG"), "photo.webp");
+    assert!(is_probably_pdf(b"%PDF-1.4 invoice"));
+    assert!(!is_probably_pdf(b"MZ\x90\x00 renamed.exe"));
+    assert!(!is_probably_pdf(b""));
+    // A real 1×1 PNG round-trips through the webp encoder (RIFF magic).
+    let png: Vec<u8> = vec![
+      0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D,
+      b'I', b'H', b'D', b'R', 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
+      0x08, 0x02, 0x00, 0x00, 0x00, 0x90, 0x77, 0x53, 0xDE, 0x00, 0x00, 0x00,
+      0x0C, b'I', b'D', b'A', b'T', 0x08, 0xD7, 0x63, 0xF8, 0xFF, 0xFF, 0x3F,
+      0x00, 0x05, 0xFE, 0x02, 0xFE, 0xDC, 0xCC, 0x59, 0xE7, 0x00, 0x00, 0x00,
+      0x00, b'I', b'E', b'N', b'D', 0xAE, 0x42, 0x60, 0x82,
+    ];
+    let webp = image_to_webp(&png).expect("1x1 png must encode");
+    assert!(webp.starts_with(b"RIFF"), "webp magic");
+    assert!(image_to_webp(b"definitely not an image").is_err());
+    assert!(image_to_webp(b"%PDF-1.4 fake").is_err());
   }
 }

@@ -321,7 +321,7 @@
         </div>
         <div class="space-y-1.5">
           <Label for="expense-invoice-file">
-            Invoice file <span class="font-normal text-muted-foreground">(image/PDF, ≤8 MiB)</span>
+            Invoice file <span class="font-normal text-muted-foreground">(image/PDF, ≤4 MiB)</span>
           </Label>
           <Input
             id="expense-invoice-file"
