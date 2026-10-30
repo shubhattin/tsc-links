@@ -14,6 +14,7 @@
   import { Label } from '$lib/components/ui/label';
   import * as Select from '$lib/components/ui/select';
   import { Spinner } from '$lib/components/ui/spinner';
+  import { Textarea } from '$lib/components/ui/textarea';
   import {
     createExpense,
     createSource,
@@ -69,6 +70,7 @@
   let newDescription = $state('');
   let date = $state(todayIso());
   let label = $state('');
+  let note = $state('');
   let usd = $state('');
   let inr = $state('');
   let invoiceLink = $state('');
@@ -83,6 +85,7 @@
     newDescription = '';
     date = todayIso();
     label = '';
+    note = '';
     usd = '';
     inr = '';
     invoiceLink = '';
@@ -109,6 +112,7 @@
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return 'Pick a valid date';
     if (inrPaise == null) return 'Enter the final ₹ amount';
     if (usd.trim() && usdCents == null) return 'Dollar amount looks off';
+    if (note.trim().length > 2000) return 'Note must be at most 2000 characters';
     return null;
   });
 
@@ -129,6 +133,7 @@
           source_key: key,
           date,
           label: label.trim() || null,
+          note: note.trim() || null,
           usd_cents: usdCents ?? null,
           inr_paise: inrPaise ?? 0,
           invoice_link: invoiceLink.trim() || null,
@@ -302,6 +307,20 @@
             bind:value={label}
           />
         </div>
+      </div>
+
+      <div class="space-y-1.5">
+        <Label for="expense-note">
+          Note <span class="font-normal text-muted-foreground">(optional)</span>
+        </Label>
+        <Textarea
+          id="expense-note"
+          rows={2}
+          maxlength={2000}
+          autocomplete="off"
+          placeholder="Why this charge, who it's for…"
+          bind:value={note}
+        />
       </div>
 
       <div class="grid gap-4 sm:grid-cols-2">

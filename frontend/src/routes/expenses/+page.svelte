@@ -6,6 +6,7 @@
   import CreateExpenseDialog from '$lib/components/expenses/create-expense-dialog.svelte';
   import EditExpenseDialog from '$lib/components/expenses/edit-expense-dialog.svelte';
   import ExpenseSourceCard from '$lib/components/expenses/expense-source-card.svelte';
+  import InvoiceViewerDialog from '$lib/components/expenses/invoice-viewer-dialog.svelte';
   import MonthPicker from '$lib/components/expenses/month-picker.svelte';
   import { Badge } from '$lib/components/ui/badge';
   import { Button } from '$lib/components/ui/button';
@@ -43,7 +44,10 @@
 
   let month = $state(currentMonth());
   let editing = $state<ExpenseDto | null>(null);
+  let viewing = $state<ExpenseDto | null>(null);
   let creating = $state(false);
+  /** `billed` = entries with a $ amount, `unbilled` = ₹-only entries. */
+  let billedFilter = $state<'all' | 'billed' | 'unbilled'>('billed');
 
   const sourcesQuery = createQuery(
     () => ({
@@ -64,7 +68,20 @@
   );
 
   const sources = $derived(sourcesQuery.data ?? []);
-  const totals = $derived(totalsBySource(sources, expensesQuery.data ?? []));
+  const visibleEntries = $derived(
+    (expensesQuery.data ?? []).filter((e) =>
+      billedFilter === 'all'
+        ? true
+        : billedFilter === 'billed'
+          ? e.usd_cents != null
+          : e.usd_cents == null,
+    ),
+  );
+  const totals = $derived(
+    totalsBySource(sources, visibleEntries).filter(
+      (t) => billedFilter === 'all' || t.entries.length > 0,
+    ),
+  );
   const monthTotalInr = $derived(totals.reduce((sum, t) => sum + t.totalInr, 0));
   const monthTotalUsd = $derived.by(() => {
     let sum = 0;
@@ -107,10 +124,31 @@
             <h2 class="flex items-center gap-2 text-lg font-semibold tracking-tight">
               Expenses
               {#if expensesQuery.isSuccess}
-                <Badge variant="secondary">{expensesQuery.data.length}</Badge>
+                <Badge variant="secondary">{visibleEntries.length}</Badge>
               {/if}
             </h2>
             <div class="flex flex-wrap items-center gap-1.5">
+              <div
+                role="group"
+                aria-label="Filter by billed amount"
+                class="flex items-center rounded-full border bg-muted/50 p-0.5 text-xs font-medium"
+              >
+                {#each [['all', 'All'], ['billed', 'Billed'], ['unbilled', 'Unbilled']] as [value, label] (value)}
+                  <button
+                    type="button"
+                    aria-pressed={billedFilter === value}
+                    class={[
+                      'rounded-full px-2.5 py-1 transition-colors',
+                      billedFilter === value
+                        ? 'bg-background text-foreground shadow-sm'
+                        : 'text-muted-foreground hover:text-foreground',
+                    ]}
+                    onclick={() => (billedFilter = value as typeof billedFilter)}
+                  >
+                    {label}
+                  </button>
+                {/each}
+              </div>
               <MonthPicker {month} onChange={(m) => (month = m)} />
               <Button
                 variant="ghost"
@@ -170,10 +208,38 @@
               </EmptyHeader>
               <Button onclick={() => (creating = true)}><Plus /> Add expense</Button>
             </Empty>
+          {:else if visibleEntries.length === 0}
+            <Empty class="border py-12">
+              <EmptyHeader>
+                <EmptyMedia variant="icon"><ReceiptText /></EmptyMedia>
+                <EmptyTitle>
+                  {billedFilter === 'all'
+                    ? 'No expenses this month'
+                    : billedFilter === 'billed'
+                      ? 'No billed expenses'
+                      : 'No unbilled expenses'}
+                </EmptyTitle>
+                <EmptyDescription>
+                  {billedFilter === 'all'
+                    ? 'Add your first expense to get started.'
+                    : billedFilter === 'billed'
+                      ? 'No entries with a billed $ amount this month.'
+                      : 'Every entry this month has a billed $ amount.'}
+                </EmptyDescription>
+              </EmptyHeader>
+              {#if billedFilter === 'all'}
+                <Button onclick={() => (creating = true)}><Plus /> Add expense</Button>
+              {/if}
+            </Empty>
           {:else}
             <div class="grid items-start gap-3 md:grid-cols-2">
               {#each totals as total (total.source.key)}
-                <ExpenseSourceCard {total} {month} onEdit={(entry) => (editing = entry)} />
+                <ExpenseSourceCard
+                  {total}
+                  {month}
+                  onEdit={(entry) => (editing = entry)}
+                  onView={(entry) => (viewing = entry)}
+                />
               {/each}
             </div>
           {/if}
@@ -185,3 +251,4 @@
 
 <CreateExpenseDialog {month} open={creating} onClose={() => (creating = false)} />
 <EditExpenseDialog entry={editing} {month} onClose={() => (editing = null)} />
+<InvoiceViewerDialog entry={viewing} onClose={() => (viewing = null)} />

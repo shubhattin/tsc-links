@@ -15,6 +15,13 @@
       "when": 1793197109632,
       "tag": "0001_fat_dark_beast",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1793375786933,
+      "tag": "0002_thick_spencer_smythe",
+      "breakpoints": true
     }
   ]
 }

@@ -17,6 +17,7 @@
   import { queryClient } from '$lib/query-client';
   import EllipsisVertical from '@lucide/svelte/icons/ellipsis-vertical';
   import ExternalLink from '@lucide/svelte/icons/external-link';
+  import Eye from '@lucide/svelte/icons/eye';
   import FileDown from '@lucide/svelte/icons/file-down';
   import FileText from '@lucide/svelte/icons/file-text';
   import Pencil from '@lucide/svelte/icons/pencil';
@@ -29,10 +30,12 @@
     total,
     month,
     onEdit,
+    onView,
   }: {
     total: SourceMonthTotal;
     month: string;
     onEdit: (entry: ExpenseDto) => void;
+    onView: (entry: ExpenseDto) => void;
   } = $props();
 
   let expanded = $state(false);
@@ -137,6 +140,9 @@
                     </span>
                   {/if}
                 </p>
+                {#if entry.note}
+                  <p class="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{entry.note}</p>
+                {/if}
               </div>
               <div class="flex shrink-0 items-center gap-0.5">
                 {#if entry.invoice_link}
@@ -152,6 +158,15 @@
                   </Button>
                 {/if}
                 {#if entry.has_invoice}
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label={entry.invoice_name ? `View ${entry.invoice_name}` : 'View invoice'}
+                    title="View invoice"
+                    onclick={() => onView(entry)}
+                  >
+                    <Eye />
+                  </Button>
                   <Button
                     variant="ghost"
                     size="icon-sm"

@@ -74,6 +74,8 @@ export const expenses = pgTable(
     date: date().notNull(),
     /** Optional pill label, e.g. `Pro plan` */
     label: varchar({ length: 120 }),
+    /** Optional short explanatory note */
+    note: text(),
     /** Optional charged USD amount, in cents */
     usdCents: bigint({ mode: 'number' }),
     /** Final charged INR amount, in paise (required) */
