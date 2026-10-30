@@ -1,4 +1,6 @@
 <script lang="ts">
+  import ExpenseDateField from '$lib/components/expenses/expense-date-field.svelte';
+  import SourceBrandIcon from '$lib/components/expenses/source-brand-icon.svelte';
   import { Button } from '$lib/components/ui/button';
   import {
     Dialog,
@@ -20,7 +22,6 @@
     listSources,
     parseInrToPaise,
     parseUsdToCents,
-    sourceBrandColor,
     todayIso,
     uploadInvoice,
     type CreateExpenseBody,
@@ -28,6 +29,7 @@
   } from '$lib/expenses-api';
   import { queryClient } from '$lib/query-client';
   import Plus from '@lucide/svelte/icons/plus';
+  import Search from '@lucide/svelte/icons/search';
   import { createMutation, createQuery } from '@tanstack/svelte-query';
   import { toast } from 'svelte-sonner';
 
@@ -52,6 +54,15 @@
 
   const sources = $derived(sourcesQuery.data ?? []);
 
+  let sourceFilter = $state('');
+  const filteredSources = $derived.by(() => {
+    const q = sourceFilter.trim().toLowerCase();
+    if (!q) return sources;
+    return sources.filter((s) =>
+      `${s.name} ${s.key} ${s.description ?? ''}`.toLowerCase().includes(q),
+    );
+  });
+
   let sourceKey = $state('');
   let newKey = $state('');
   let newName = $state('');
@@ -66,6 +77,7 @@
 
   function reset() {
     sourceKey = '';
+    sourceFilter = '';
     newKey = '';
     newName = '';
     newDescription = '';
@@ -155,27 +167,33 @@
           <Select.Root type="single" bind:value={sourceKey}>
             <Select.Trigger id="expense-source" class="w-full">
               {#if sourceKey && sourceKey !== '__new__'}
-                {@const dot = sourceBrandColor(sourceKey)}
-                <span
-                  aria-hidden="true"
-                  class="size-2.5 shrink-0 rounded-full"
-                  style={dot ? `background-color: ${dot};` : undefined}
-                  class:bg-muted-foreground={dot == null}
-                ></span>
+                <SourceBrandIcon {sourceKey} size="sm" />
               {/if}
               <Select.Value placeholder="Pick a source" />
             </Select.Trigger>
-            <Select.Content>
+            <Select.Content class="max-h-80">
+              <div class="sticky top-0 z-10 bg-popover pt-1 pb-1.5">
+                <div class="relative">
+                  <Search
+                    class="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground"
+                  />
+                  <Input
+                    class="h-8 rounded-xl pr-2 pl-8 text-sm"
+                    placeholder="Search sources…"
+                    autocomplete="off"
+                    bind:value={sourceFilter}
+                    onkeydown={(e) => {
+                      // Let the select handle Escape (close); keep typing,
+                      // arrows and Enter local to the search box.
+                      if (e.key !== 'Escape') e.stopPropagation();
+                    }}
+                  />
+                </div>
+              </div>
               <Select.Group>
-                {#each sources as source (source.key)}
-                  {@const color = sourceBrandColor(source.key)}
+                {#each filteredSources as source (source.key)}
                   <Select.Item value={source.key} label={source.name}>
-                    <span
-                      aria-hidden="true"
-                      class="size-2.5 shrink-0 rounded-full"
-                      style={color ? `background-color: ${color};` : undefined}
-                      class:bg-muted-foreground={color == null}
-                    ></span>
+                    <SourceBrandIcon sourceKey={source.key} size="sm" />
                     <span class="min-w-0">
                       <span class="block truncate">{source.name}</span>
                       {#if source.description}
@@ -186,19 +204,25 @@
                     </span>
                   </Select.Item>
                 {/each}
+                {#if filteredSources.length === 0}
+                  <p class="px-3 py-4 text-center text-xs text-muted-foreground">
+                    No sources match “{sourceFilter.trim()}”.
+                  </p>
+                {/if}
               </Select.Group>
               <Select.Separator />
               <Select.Item value="__new__" label="New source…">
-                <span aria-hidden="true" class="size-2.5 shrink-0 rounded-full bg-primary"></span>
+                <span
+                  aria-hidden="true"
+                  class="grid size-7 shrink-0 place-items-center rounded-xl border border-dashed text-lg leading-none text-primary"
+                  >+</span
+                >
                 New source…
               </Select.Item>
             </Select.Content>
           </Select.Root>
         </div>
-        <div class="space-y-1.5">
-          <Label for="expense-date">Charge date</Label>
-          <Input id="expense-date" type="date" required bind:value={date} max={todayIso()} />
-        </div>
+        <ExpenseDateField id="expense-date" bind:value={date} />
       </div>
 
       {#if creatingNew}

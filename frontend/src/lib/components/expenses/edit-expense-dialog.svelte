@@ -1,4 +1,5 @@
 <script lang="ts">
+  import ExpenseDateField from '$lib/components/expenses/expense-date-field.svelte';
   import { Button } from '$lib/components/ui/button';
   import {
     Dialog,
@@ -128,10 +129,7 @@
     </DialogHeader>
     <form id="edit-expense-form" onsubmit={submit} class="space-y-4">
       <div class="grid gap-4 sm:grid-cols-2">
-        <div class="space-y-1.5">
-          <Label for="edit-expense-date">Charge date</Label>
-          <Input id="edit-expense-date" type="date" required bind:value={date} />
-        </div>
+        <ExpenseDateField id="edit-expense-date" bind:value={date} />
         <div class="space-y-1.5">
           <Label for="edit-expense-label">
             Label <span class="font-normal text-muted-foreground">(optional)</span>
