@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { goto } from '$app/navigation';
+  import { page } from '$app/state';
   import { authClient, isAdmin, type Session } from '$lib/auth-client';
   import { Avatar, AvatarFallback, AvatarImage } from '$lib/components/ui/avatar';
   import { Button } from '$lib/components/ui/button';
@@ -15,11 +17,15 @@
   import LogOut from '@lucide/svelte/icons/log-out';
   import Monitor from '@lucide/svelte/icons/monitor';
   import Moon from '@lucide/svelte/icons/moon';
+  import ReceiptText from '@lucide/svelte/icons/receipt-text';
   import Sun from '@lucide/svelte/icons/sun';
   import { setMode, userPrefersMode } from 'mode-watcher';
   import { toast } from 'svelte-sonner';
 
   let { user }: { user: Session['user'] | null } = $props();
+
+  // Show only the *other* page's link — no self-link for the page being viewed.
+  const onExpenses = $derived(page.url.pathname.startsWith('/expenses'));
 
   let signingOut = $state(false);
 
@@ -58,8 +64,11 @@
     </a>
     <div class="flex items-center gap-1">
       {#if user && isAdmin(user)}
-        <Button variant="ghost" size="sm" href="/" class="max-sm:hidden">Links</Button>
-        <Button variant="ghost" size="sm" href="/expenses" class="max-sm:hidden">Expenses</Button>
+        {#if onExpenses}
+          <Button variant="ghost" size="sm" href="/" class="max-sm:hidden">Links</Button>
+        {:else}
+          <Button variant="ghost" size="sm" href="/expenses" class="max-sm:hidden">Expenses</Button>
+        {/if}
       {/if}
       <DropdownMenu>
         <DropdownMenuTrigger>
@@ -108,6 +117,18 @@
               {/if}
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
+            {#if isAdmin(user)}
+              {#if onExpenses}
+                <DropdownMenuItem class="sm:hidden" onSelect={() => void goto('/')}>
+                  <Link2 /> Links
+                </DropdownMenuItem>
+              {:else}
+                <DropdownMenuItem class="sm:hidden" onSelect={() => void goto('/expenses')}>
+                  <ReceiptText /> Expenses
+                </DropdownMenuItem>
+              {/if}
+              <DropdownMenuSeparator class="sm:hidden" />
+            {/if}
             <DropdownMenuItem disabled={signingOut} onSelect={signOut}>
               <LogOut /> Sign out
             </DropdownMenuItem>
