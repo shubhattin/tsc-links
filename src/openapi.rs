@@ -5,6 +5,10 @@ use utoipa::OpenApi;
 use utoipa::openapi::security::{ApiKey, ApiKeyValue, SecurityScheme};
 
 use crate::auth::ErrorBody;
+use crate::routes::expenses::{
+  CreateExpenseBody, CreateSourceBody, ExpenseDto, ExpenseSourceDto, ExpensesListResponse,
+  ExpenseSourcesListResponse, UpdateExpenseBody, UpdateSourceBody,
+};
 use crate::routes::links::{CreateLinkBody, LinkDto, LinksListResponse, UpdateLinkBody};
 
 /// Root OpenAPI document; operation paths are registered by nested [`utoipa_axum::OpenApiRouter`]s.
@@ -15,9 +19,17 @@ use crate::routes::links::{CreateLinkBody, LinkDto, LinksListResponse, UpdateLin
         version = "0.1.0",
         description = "Short-link admin API. Redirects (`GET /{slug}`) are public and not part of this document."
     ),
-    components(schemas(ErrorBody, LinkDto, LinksListResponse, CreateLinkBody, UpdateLinkBody)),
+    components(schemas(
+      ErrorBody,
+      LinkDto, LinksListResponse, CreateLinkBody, UpdateLinkBody,
+      ExpenseSourceDto, ExpenseSourcesListResponse, CreateSourceBody, UpdateSourceBody,
+      ExpenseDto, ExpensesListResponse, CreateExpenseBody, UpdateExpenseBody,
+    )),
     modifiers(&SecurityAddon),
-    tags((name = "links", description = "Short links (Better Auth admin session required)"))
+    tags(
+        (name = "links", description = "Short links (Better Auth admin session required)"),
+        (name = "expenses", description = "Expense tracking (Better Auth admin session required)")
+    )
 )]
 pub struct ApiDoc;
 

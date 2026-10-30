@@ -57,6 +57,10 @@
       Links
     </a>
     <div class="flex items-center gap-1">
+      {#if user && isAdmin(user)}
+        <Button variant="ghost" size="sm" href="/" class="max-sm:hidden">Links</Button>
+        <Button variant="ghost" size="sm" href="/expenses" class="max-sm:hidden">Expenses</Button>
+      {/if}
       <DropdownMenu>
         <DropdownMenuTrigger>
           {#snippet child({ props })}
