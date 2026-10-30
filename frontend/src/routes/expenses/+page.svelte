@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { goto } from '$app/navigation';
+  import { page } from '$app/state';
   import { authClient, isAdmin } from '$lib/auth-client';
   import AppHeader from '$lib/components/app-header.svelte';
   import NoAccess from '$lib/components/auth/no-access.svelte';
@@ -26,6 +28,8 @@
     formatUsd,
     listExpenses,
     listSources,
+    MONTH_PARAM,
+    normalizeMonthParam,
     totalsBySource,
     type ExpenseDto,
   } from '$lib/expenses-api';
@@ -42,7 +46,62 @@
   const session = authClient.useSession();
   const user = $derived($session.data?.user ?? null);
 
+  // Month filter synced with `?month=YYYY-MM`:
+  // - no param (or an invalid one) → current month, canonical URL has no param
+  // - `?month=<current month>` → stripped to the canonical param-less URL
+  // - any other valid month → kept in the URL so it stays shareable
   let month = $state(currentMonth());
+  let monthSyncedFromUrl = $state(false);
+
+  // URL → state: initial hydration plus back/forward navigation.
+  $effect(() => {
+    const raw = page.url.searchParams.get(MONTH_PARAM);
+    const normalized = normalizeMonthParam(raw);
+    const today = currentMonth();
+    if (!monthSyncedFromUrl) {
+      if (normalized == null || normalized === today) {
+        month = today;
+        if (raw != null && raw !== '') {
+          void goto('/expenses', { replaceState: true, keepFocus: true, noScroll: true });
+        }
+      } else {
+        month = normalized;
+        if (raw !== normalized) {
+          void goto(`/expenses?${MONTH_PARAM}=${normalized}`, {
+            replaceState: true,
+            keepFocus: true,
+            noScroll: true,
+          });
+        }
+      }
+      monthSyncedFromUrl = true;
+      return;
+    }
+    if (normalized == null) {
+      if (month !== today) month = today;
+    } else if (normalized !== month) {
+      month = normalized;
+    }
+  });
+
+  // State → URL: keep the address bar (and shared links) in sync.
+  $effect(() => {
+    if (!monthSyncedFromUrl) return;
+    const today = currentMonth();
+    const raw = page.url.searchParams.get(MONTH_PARAM);
+    if (month === today) {
+      if (raw != null && raw !== '') {
+        void goto('/expenses', { replaceState: true, keepFocus: true, noScroll: true });
+      }
+    } else if (raw !== month) {
+      void goto(`/expenses?${MONTH_PARAM}=${month}`, {
+        replaceState: true,
+        keepFocus: true,
+        noScroll: true,
+      });
+    }
+  });
+
   let editing = $state<ExpenseDto | null>(null);
   let viewing = $state<ExpenseDto | null>(null);
   let creating = $state(false);
