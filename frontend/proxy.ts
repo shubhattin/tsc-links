@@ -17,5 +17,7 @@ const axumProxy: ProxyOptions = {
 
 export const proxy: Record<string, ProxyOptions> = {
   '^/api(?:/.*)?$': axumProxy,
-  '^/[A-Za-z0-9_-]+/?$': axumProxy,
+  // Single-segment slugs go to axum — except `/expenses`, which is a
+  // SvelteKit page (mirrors the root vercel.json).
+  '^/(?!expenses$)[A-Za-z0-9_-]+/?$': axumProxy,
 };

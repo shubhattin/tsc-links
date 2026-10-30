@@ -61,7 +61,9 @@ async fn fallback(uri: Uri) -> Response {
 }
 
 fn compose_openapi_router(state: Option<&AppState>) -> OpenApiRouter<AppState> {
-  let protected = OpenApiRouter::new().merge(crate::routes::links::openapi_router());
+  let protected = OpenApiRouter::new()
+    .merge(crate::routes::links::openapi_router())
+    .merge(crate::routes::expenses::openapi_router());
   let protected = match state {
     Some(state) => protected.route_layer(middleware::from_fn_with_state(
       state.clone(),

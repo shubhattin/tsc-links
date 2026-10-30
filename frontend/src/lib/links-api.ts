@@ -57,7 +57,7 @@ export function shortUrlDisplay(slug: string): string {
 
 /** Mirrors the Rust validator (`utils::slug`). */
 export const SLUG_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
-const RESERVED_SLUGS = ['api', '_app'];
+const RESERVED_SLUGS = ['api', '_app', 'expenses'];
 
 export function slugError(slug: string): string | null {
   if (!slug) return null;

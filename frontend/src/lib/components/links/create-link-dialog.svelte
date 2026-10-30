@@ -2,12 +2,13 @@
   import CopyButton from '$lib/components/links/copy-button.svelte';
   import { Button } from '$lib/components/ui/button';
   import {
-    Card,
-    CardContent,
-    CardDescription,
-    CardHeader,
-    CardTitle,
-  } from '$lib/components/ui/card';
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+  } from '$lib/components/ui/dialog';
   import { Input } from '$lib/components/ui/input';
   import {
     InputGroup,
@@ -33,11 +34,25 @@
   import { createMutation } from '@tanstack/svelte-query';
   import { toast } from 'svelte-sonner';
 
+  let { open, onClose }: { open: boolean; onClose: () => void } = $props();
+
   let url = $state('');
   let slug = $state('');
   let title = $state('');
   let created = $state<LinkDto | null>(null);
   let urlInput = $state<HTMLInputElement | null>(null);
+
+  function reset() {
+    url = '';
+    slug = '';
+    title = '';
+    created = null;
+  }
+
+  // Fresh form every time the dialog opens.
+  $effect.pre(() => {
+    if (open) reset();
+  });
 
   const slugErr = $derived(slugError(slug.trim()));
   const host = $derived(typeof window === 'undefined' ? '' : window.location.host);
@@ -74,43 +89,31 @@
   }
 </script>
 
-<Card class="rise">
-  <CardHeader>
-    <CardTitle class="text-lg">Shorten a link</CardTitle>
-    <CardDescription>
-      Paste a long URL. Leave the slug empty for a random one — you can edit it any time.
-    </CardDescription>
-  </CardHeader>
-  <CardContent>
-    <form onsubmit={submit} class="space-y-4">
-      <div class="flex flex-col gap-2 sm:flex-row">
-        <InputGroup class="h-10 flex-1">
-          <InputGroupAddon>
-            <LinkIcon />
-          </InputGroupAddon>
-          <InputGroupInput
-            bind:ref={urlInput}
-            type="url"
-            inputmode="url"
-            required
-            autocomplete="off"
-            spellcheck={false}
-            placeholder="https://example.com/a/very/long/url"
-            aria-label="Destination URL"
-            bind:value={url}
-          />
-        </InputGroup>
-        <Button
-          type="submit"
-          size="lg"
-          class="h-10 sm:w-32"
-          disabled={mutation.isPending || !url.trim() || !!slugErr}
-        >
-          {#if mutation.isPending}<Spinner />{/if}
-          Shorten
-        </Button>
-      </div>
-
+<Dialog {open} onOpenChange={(isOpen) => !isOpen && onClose()}>
+  <DialogContent class="max-h-[90svh] overflow-y-auto sm:max-w-lg">
+    <DialogHeader>
+      <DialogTitle>Shorten a link</DialogTitle>
+      <DialogDescription>
+        Paste a long URL. Leave the slug empty for a random one — you can edit it any time.
+      </DialogDescription>
+    </DialogHeader>
+    <form id="create-link-form" onsubmit={submit} class="space-y-4">
+      <InputGroup class="h-10">
+        <InputGroupAddon>
+          <LinkIcon />
+        </InputGroupAddon>
+        <InputGroupInput
+          bind:ref={urlInput}
+          type="url"
+          inputmode="url"
+          required
+          autocomplete="off"
+          spellcheck={false}
+          placeholder="https://example.com/a/very/long/url"
+          aria-label="Destination URL"
+          bind:value={url}
+        />
+      </InputGroup>
       <div class="grid gap-4 sm:grid-cols-2">
         <div class="space-y-1.5">
           <Label for="create-slug">
@@ -152,7 +155,7 @@
 
     {#if created}
       <div
-        class="rise mt-5 flex items-center gap-2 rounded-xl border border-primary/25 bg-primary/5 py-2 pr-2 pl-4"
+        class="rise flex items-center gap-2 rounded-xl border border-primary/25 bg-primary/5 py-2 pr-2 pl-4"
       >
         <div class="min-w-0 flex-1">
           <p class="text-xs text-muted-foreground">Your short link</p>
@@ -189,5 +192,17 @@
         </Button>
       </div>
     {/if}
-  </CardContent>
-</Card>
+
+    <DialogFooter>
+      <Button variant="outline" onclick={onClose}>Cancel</Button>
+      <Button
+        type="submit"
+        form="create-link-form"
+        disabled={mutation.isPending || !url.trim() || !!slugErr}
+      >
+        {#if mutation.isPending}<Spinner />{/if}
+        Shorten
+      </Button>
+    </DialogFooter>
+  </DialogContent>
+</Dialog>

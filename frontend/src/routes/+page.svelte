@@ -3,7 +3,7 @@
   import AppHeader from '$lib/components/app-header.svelte';
   import NoAccess from '$lib/components/auth/no-access.svelte';
   import SignInCard from '$lib/components/auth/sign-in-card.svelte';
-  import CreateLinkCard from '$lib/components/links/create-link-card.svelte';
+  import CreateLinkDialog from '$lib/components/links/create-link-dialog.svelte';
   import LinkList from '$lib/components/links/link-list.svelte';
   import { Skeleton } from '$lib/components/ui/skeleton';
 
@@ -11,6 +11,8 @@
   // UX gate only — the Rust API re-checks the session cookie on every request.
   const session = authClient.useSession();
   const user = $derived($session.data?.user ?? null);
+
+  let creating = $state(false);
 </script>
 
 <div class="flex min-h-svh flex-col">
@@ -26,10 +28,9 @@
     {:else if !isAdmin(user)}
       <NoAccess {user} />
     {:else}
-      <div class="space-y-8">
-        <CreateLinkCard />
-        <LinkList />
-      </div>
+      <LinkList onAdd={() => (creating = true)} />
     {/if}
   </main>
 </div>
+
+<CreateLinkDialog open={creating} onClose={() => (creating = false)} />

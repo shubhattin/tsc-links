@@ -20,7 +20,8 @@ const ALPHABET: [char; 62] = [
 ];
 
 /// Path segments owned by the app itself (compared case-insensitively).
-const RESERVED: &[&str] = &["api", "_app"];
+/// `expenses` is a SvelteKit page (`/expenses`), not a short link.
+const RESERVED: &[&str] = &["api", "_app", "expenses"];
 
 /// Generate a random slug (not checked for uniqueness).
 pub fn generate_slug() -> String {
@@ -64,7 +65,7 @@ mod tests {
 
   #[test]
   fn rejects_bad_slugs() {
-    for bad in ["", "a/b", "favicon.ico", "with space", "API", "_app", "é"] {
+    for bad in ["", "a/b", "favicon.ico", "with space", "API", "_app", "expenses", "é"] {
       assert!(validate_slug(bad).is_err(), "{bad} should be rejected");
     }
     assert!(validate_slug(&"x".repeat(SLUG_MAX_LEN + 1)).is_err());
