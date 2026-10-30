@@ -26,6 +26,9 @@ pub struct Model {
   pub date: Date,
   /// Optional pill label, e.g. `Pro plan`.
   pub label: Option<String>,
+  /// Optional short explanatory note.
+  #[sea_orm(column_type = "Text", nullable)]
+  pub note: Option<String>,
   #[sea_orm(column_name = "usdCents", nullable)]
   pub usd_cents: Option<i64>,
   #[sea_orm(column_name = "inrPaise")]

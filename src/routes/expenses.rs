@@ -39,6 +39,7 @@ use crate::entities::{expense, expense_source};
 use crate::state::AppState;
 
 const LABEL_MAX_LEN: usize = 120;
+const NOTE_MAX_LEN: usize = 2000;
 const NAME_MAX_LEN: usize = 64;
 const DESC_MAX_LEN: usize = 2000;
 /// Raw invoice uploads are capped. 4 MiB keeps us under Vercel's ~4.5 MB
@@ -359,6 +360,8 @@ pub struct ExpenseDto {
   pub date: String,
   /// Optional pill label.
   pub label: Option<String>,
+  /// Optional short explanatory note.
+  pub note: Option<String>,
   /// Optional charged USD amount, in cents.
   pub usd_cents: Option<i64>,
   /// Final charged INR amount, in paise.
@@ -392,6 +395,8 @@ pub struct CreateExpenseBody {
   pub date: String,
   /// Optional pill label (max 120 chars).
   pub label: Option<String>,
+  /// Optional short explanatory note (max 2000 chars).
+  pub note: Option<String>,
   /// Optional charged USD amount, in cents.
   pub usd_cents: Option<i64>,
   /// Final charged INR amount, in paise (required).
@@ -407,6 +412,7 @@ pub struct UpdateExpenseBody {
   pub source_key: Option<String>,
   pub date: Option<String>,
   pub label: Option<String>,
+  pub note: Option<String>,
   // Explicit `null` must mean "clear", not "unchanged" — serde collapses
   // `Option<Option<T>>` nulls to `None` by default, hence the custom
   // deserializer (missing → `None`, null → `Some(None)`).
@@ -475,6 +481,16 @@ fn normalize_money(raw: i64, field: &str) -> Result<i64, String> {
   Ok(raw)
 }
 
+fn normalize_note(raw: Option<&str>) -> Result<Option<String>, String> {
+  let Some(note) = raw.map(str::trim).filter(|n| !n.is_empty()) else {
+    return Ok(None);
+  };
+  if note.chars().count() > NOTE_MAX_LEN {
+    return Err(format!("note must be at most {NOTE_MAX_LEN} characters"));
+  }
+  Ok(Some(note.to_string()))
+}
+
 fn normalize_invoice_link(raw: Option<&str>) -> Result<Option<String>, String> {
   let Some(link) = raw.map(str::trim).filter(|l| !l.is_empty()) else {
     return Ok(None);
@@ -493,6 +509,7 @@ fn expense_dto(row: expense::Model, source_name: &str) -> ExpenseDto {
     source_name: source_name.to_string(),
     date: row.date.format("%Y-%m-%d").to_string(),
     label: row.label,
+    note: row.note,
     usd_cents: row.usd_cents,
     inr_paise: row.inr_paise,
     invoice_link: row.invoice_link,
@@ -604,6 +621,10 @@ pub async fn create_expense(
     Ok(l) => l,
     Err(msg) => return bad_request(msg),
   };
+  let note = match normalize_note(body.note.as_deref()) {
+    Ok(n) => n,
+    Err(msg) => return bad_request(msg),
+  };
   let usd_cents = match body.usd_cents.map(|c| normalize_money(c, "usd_cents")).transpose() {
     Ok(c) => c,
     Err(msg) => return bad_request(msg),
@@ -636,6 +657,7 @@ pub async fn create_expense(
     source_key: Set(source_key.clone()),
     date: Set(date),
     label: Set(label),
+    note: Set(note),
     usd_cents: Set(usd_cents),
     inr_paise: Set(inr_paise),
     invoice_link: Set(invoice_link),
@@ -716,6 +738,12 @@ pub async fn update_expense(
   if body.label.is_some() {
     match normalize_label(body.label.as_deref()) {
       Ok(label) => model.label = Set(label),
+      Err(msg) => return bad_request(msg),
+    }
+  }
+  if body.note.is_some() {
+    match normalize_note(body.note.as_deref()) {
+      Ok(note) => model.note = Set(note),
       Err(msg) => return bad_request(msg),
     }
   }

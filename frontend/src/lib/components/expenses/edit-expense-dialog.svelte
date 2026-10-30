@@ -12,6 +12,7 @@
   import { Input } from '$lib/components/ui/input';
   import { Label } from '$lib/components/ui/label';
   import { Spinner } from '$lib/components/ui/spinner';
+  import { Textarea } from '$lib/components/ui/textarea';
   import {
     deleteInvoice,
     expensesQueryKey,
@@ -38,6 +39,7 @@
 
   let date = $state('');
   let label = $state('');
+  let note = $state('');
   let usd = $state('');
   let inr = $state('');
   let invoiceLink = $state('');
@@ -50,6 +52,7 @@
     if (!entry) return;
     date = entry.date;
     label = entry.label ?? '';
+    note = entry.note ?? '';
     usd = entry.usd_cents != null ? (entry.usd_cents / 100).toString() : '';
     inr = (entry.inr_paise / 100).toString();
     invoiceLink = entry.invoice_link ?? '';
@@ -67,6 +70,7 @@
     const body: UpdateExpenseBody = {};
     if (date !== entry.date) body.date = date;
     if (label.trim() !== (entry.label ?? '')) body.label = label.trim();
+    if (note.trim() !== (entry.note ?? '')) body.note = note.trim();
     const wantUsd = usd.trim() ? (usdCents ?? entry.usd_cents) : null;
     if (wantUsd !== entry.usd_cents) body.usd_cents = wantUsd;
     if (inrPaise != null && inrPaise !== entry.inr_paise) body.inr_paise = inrPaise;
@@ -81,6 +85,7 @@
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return 'Pick a valid date';
     if (inrPaise == null) return 'Enter the final ₹ amount';
     if (usd.trim() && usdCents == null) return 'Dollar amount looks off';
+    if (note.trim().length > 2000) return 'Note must be at most 2000 characters';
     return null;
   });
   const dirty = $derived(Object.keys(changes).length > 0 || invoiceFile != null || removeBlob);
@@ -136,6 +141,19 @@
           </Label>
           <Input id="edit-expense-label" maxlength={120} autocomplete="off" bind:value={label} />
         </div>
+      </div>
+      <div class="space-y-1.5">
+        <Label for="edit-expense-note">
+          Note <span class="font-normal text-muted-foreground">(optional)</span>
+        </Label>
+        <Textarea
+          id="edit-expense-note"
+          rows={2}
+          maxlength={2000}
+          autocomplete="off"
+          placeholder="Blank clears it"
+          bind:value={note}
+        />
       </div>
       <div class="grid gap-4 sm:grid-cols-2">
         <div class="space-y-1.5">

@@ -9,7 +9,9 @@ INSERT INTO expense_sources (key, name, description) VALUES
   ('cloudflare', 'Cloudflare', 'DNS, CDN, Workers and security'),
   ('upstash', 'Upstash', 'Serverless Redis and Kafka'),
   ('neon', 'Neon Database', 'Serverless Postgres'),
-  ('misc', 'Miscellaneous', 'One-off costs that fit nowhere else')
+  ('misc', 'Miscellaneous', 'One-off costs that fit nowhere else'),
+  ('openrouter', 'OpenRouter', 'Unified LLM API gateway'),
+  ('openai-platform', 'OpenAI Platform', 'OpenAI API: models and embeddings')
 ON CONFLICT (key) DO UPDATE SET
   name = EXCLUDED.name,
   description = EXCLUDED.description,
