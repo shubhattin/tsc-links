@@ -210,6 +210,35 @@ export function monthLabel(month: string): string {
   return new Date(y, m - 1, 1).toLocaleString('en-US', { month: 'long', year: 'numeric' });
 }
 
+/** Query-param key used for the expenses month filter (`/expenses?month=YYYY-MM`). */
+export const MONTH_PARAM = 'month' as const;
+
+/** `true` when `value` is a calendar month as `YYYY-MM`. */
+export function isValidMonth(value: string): boolean {
+  return /^\d{4}-(0[1-9]|1[0-2])$/.test(value);
+}
+
+/**
+ * Normalize a raw `?month=` value to `YYYY-MM`, or `null` when absent/invalid.
+ *
+ * Accepts the canonical `YYYY-MM` form plus the `MM-YYYY` form (as suggested in
+ * the original issue) so shared links in either shape resolve to the same month.
+ */
+export function normalizeMonthParam(raw: string | null | undefined): string | null {
+  if (raw == null) return null;
+  const value = raw.trim();
+  if (value === '') return null;
+  if (isValidMonth(value)) return value;
+  const mmYyyy = /^(\d{1,2})-(\d{4})$/.exec(value);
+  if (mmYyyy) {
+    const mm = mmYyyy[1].padStart(2, '0');
+    const yyyy = mmYyyy[2];
+    const normalized = `${yyyy}-${mm}`;
+    if (isValidMonth(normalized)) return normalized;
+  }
+  return null;
+}
+
 /** Shift `YYYY-MM` by `delta` months. */
 export function shiftMonth(month: string, delta: number): string {
   const [y, m] = month.split('-').map(Number);
