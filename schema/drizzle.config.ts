@@ -1,15 +1,19 @@
-import type { Config } from 'drizzle-kit';
-import dotenv from 'dotenv';
+import type { Config } from "drizzle-kit";
+import dotenv from "dotenv";
 
-dotenv.config({ path: '../.env.local' });
+dotenv.config({ path: "../.env.local" });
 
 const DB_URL =
-  process.env.DB_MODE === 'PROD' ? process.env.PG_DATABASE_URL1 : process.env.PG_DATABASE_URL;
+  process.env.DB_MODE === "PROD"
+    ? process.env.PG_DATABASE_URL1
+    : process.env.DB_MODE === "PREVIEW"
+      ? process.env.PG_DATABASE_URL2
+      : process.env.PG_DATABASE_URL;
 
 export default {
-  schema: './schema.ts',
-  out: './migrations',
-  dialect: 'postgresql',
+  schema: "./schema.ts",
+  out: "./migrations",
+  dialect: "postgresql",
   dbCredentials: {
     url: DB_URL!,
   },

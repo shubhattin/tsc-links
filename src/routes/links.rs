@@ -378,7 +378,13 @@ mod tests {
       normalize_url("https://例え.jp/パス?q=1").unwrap(),
       "https://xn--r8jz45g.jp/%E3%83%91%E3%82%B9?q=1"
     );
-    for bad in ["", "example.com", "javascript:alert(1)", "ftp://x.com", "https://"] {
+    for bad in [
+      "",
+      "example.com",
+      "javascript:alert(1)",
+      "ftp://x.com",
+      "https://",
+    ] {
       assert!(normalize_url(bad).is_err(), "{bad} should be rejected");
     }
   }
@@ -386,7 +392,10 @@ mod tests {
   #[test]
   fn title_normalization() {
     assert_eq!(normalize_title(Some("  ")).unwrap(), None);
-    assert_eq!(normalize_title(Some(" Hi ")).unwrap().as_deref(), Some("Hi"));
+    assert_eq!(
+      normalize_title(Some(" Hi ")).unwrap().as_deref(),
+      Some("Hi")
+    );
     assert!(normalize_title(Some(&"x".repeat(256))).is_err());
   }
 }

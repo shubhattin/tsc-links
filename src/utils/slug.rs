@@ -65,7 +65,16 @@ mod tests {
 
   #[test]
   fn rejects_bad_slugs() {
-    for bad in ["", "a/b", "favicon.ico", "with space", "API", "_app", "expenses", "é"] {
+    for bad in [
+      "",
+      "a/b",
+      "favicon.ico",
+      "with space",
+      "API",
+      "_app",
+      "expenses",
+      "é",
+    ] {
       assert!(validate_slug(bad).is_err(), "{bad} should be rejected");
     }
     assert!(validate_slug(&"x".repeat(SLUG_MAX_LEN + 1)).is_err());

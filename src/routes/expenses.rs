@@ -228,7 +228,10 @@ pub async fn create_source(
     ..Default::default()
   };
   match expense_source::Entity::insert(model).exec(&state.db).await {
-    Ok(_) => match expense_source::Entity::find_by_id(&key).one(&state.db).await {
+    Ok(_) => match expense_source::Entity::find_by_id(&key)
+      .one(&state.db)
+      .await
+    {
       Ok(Some(row)) => (StatusCode::CREATED, Json(ExpenseSourceDto::from(row))).into_response(),
       Ok(None) => internal_error(DbErr::RecordNotFound("source vanished".to_string())),
       Err(e) => internal_error(e),
@@ -263,7 +266,10 @@ pub async fn update_source(
   Path(key): Path<String>,
   Json(body): Json<UpdateSourceBody>,
 ) -> Response {
-  let row = match expense_source::Entity::find_by_id(key.trim()).one(&state.db).await {
+  let row = match expense_source::Entity::find_by_id(key.trim())
+    .one(&state.db)
+    .await
+  {
     Ok(Some(row)) => row,
     Ok(None) => return error_response(StatusCode::NOT_FOUND, "source not found"),
     Err(e) => return internal_error(e),
@@ -324,7 +330,10 @@ pub async fn delete_source(State(state): State<AppState>, Path(key): Path<String
     Ok(false) => {}
     Err(e) => return internal_error(e),
   }
-  match expense_source::Entity::delete_by_id(key).exec(&state.db).await {
+  match expense_source::Entity::delete_by_id(key)
+    .exec(&state.db)
+    .await
+  {
     Ok(_) => StatusCode::NO_CONTENT.into_response(),
     Err(e) if is_fk_violation(&e) => error_response(
       StatusCode::CONFLICT,
@@ -447,13 +456,17 @@ fn parse_month(raw: &str) -> Result<(NaiveDate, NaiveDate), String> {
   if parts.len() != 2 || parts[0].len() != 4 || parts[1].len() != 2 {
     return Err("month must be YYYY-MM".to_string());
   }
-  let year: i32 = parts[0].parse().map_err(|_| "month must be YYYY-MM".to_string())?;
-  let month: u32 = parts[1].parse().map_err(|_| "month must be YYYY-MM".to_string())?;
+  let year: i32 = parts[0]
+    .parse()
+    .map_err(|_| "month must be YYYY-MM".to_string())?;
+  let month: u32 = parts[1]
+    .parse()
+    .map_err(|_| "month must be YYYY-MM".to_string())?;
   if !(1..=12).contains(&month) {
     return Err("month must be YYYY-MM".to_string());
   }
-  let start = NaiveDate::from_ymd_opt(year, month, 1)
-    .ok_or_else(|| "month must be YYYY-MM".to_string())?;
+  let start =
+    NaiveDate::from_ymd_opt(year, month, 1).ok_or_else(|| "month must be YYYY-MM".to_string())?;
   let end = if month == 12 {
     NaiveDate::from_ymd_opt(year + 1, 1, 1).expect("year+1 is valid")
   } else {
@@ -567,10 +580,7 @@ pub async fn list_expenses(
   let (rows, names) = match tokio::join!(finder.all(&state.db), source_names(&state)) {
     (Ok(rows), Ok(names)) => (rows, names),
     _ => {
-      return error_response(
-        StatusCode::INTERNAL_SERVER_ERROR,
-        "database error",
-      );
+      return error_response(StatusCode::INTERNAL_SERVER_ERROR, "database error");
     }
   };
   Json(ExpensesListResponse {
@@ -625,7 +635,11 @@ pub async fn create_expense(
     Ok(n) => n,
     Err(msg) => return bad_request(msg),
   };
-  let usd_cents = match body.usd_cents.map(|c| normalize_money(c, "usd_cents")).transpose() {
+  let usd_cents = match body
+    .usd_cents
+    .map(|c| normalize_money(c, "usd_cents"))
+    .transpose()
+  {
     Ok(c) => c,
     Err(msg) => return bad_request(msg),
   };
@@ -668,8 +682,13 @@ pub async fn create_expense(
   };
   match expense::Entity::insert(model).exec(&state.db).await {
     Ok(inserted) => {
-      match expense::Entity::find_by_id(inserted.last_insert_id).one(&state.db).await {
-        Ok(Some(row)) => (StatusCode::CREATED, Json(expense_dto(row, &source_name))).into_response(),
+      match expense::Entity::find_by_id(inserted.last_insert_id)
+        .one(&state.db)
+        .await
+      {
+        Ok(Some(row)) => {
+          (StatusCode::CREATED, Json(expense_dto(row, &source_name))).into_response()
+        }
         Ok(None) => internal_error(DbErr::RecordNotFound("expense vanished".to_string())),
         Err(e) => internal_error(e),
       }
@@ -718,7 +737,10 @@ pub async fn update_expense(
       Ok(k) => k,
       Err(msg) => return bad_request(msg),
     };
-    match expense_source::Entity::find_by_id(&source_key).one(&state.db).await {
+    match expense_source::Entity::find_by_id(&source_key)
+      .one(&state.db)
+      .await
+    {
       Ok(Some(_)) => model.source_key = Set(source_key),
       Ok(None) => {
         return error_response(
@@ -1173,11 +1195,10 @@ mod tests {
     assert!(!is_probably_pdf(b""));
     // A real 1×1 PNG round-trips through the webp encoder (RIFF magic).
     let png: Vec<u8> = vec![
-      0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D,
-      b'I', b'H', b'D', b'R', 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
-      0x08, 0x02, 0x00, 0x00, 0x00, 0x90, 0x77, 0x53, 0xDE, 0x00, 0x00, 0x00,
-      0x0C, b'I', b'D', b'A', b'T', 0x08, 0xD7, 0x63, 0xF8, 0xFF, 0xFF, 0x3F,
-      0x00, 0x05, 0xFE, 0x02, 0xFE, 0xDC, 0xCC, 0x59, 0xE7, 0x00, 0x00, 0x00,
+      0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, b'I', b'H', b'D',
+      b'R', 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x02, 0x00, 0x00, 0x00, 0x90,
+      0x77, 0x53, 0xDE, 0x00, 0x00, 0x00, 0x0C, b'I', b'D', b'A', b'T', 0x08, 0xD7, 0x63, 0xF8,
+      0xFF, 0xFF, 0x3F, 0x00, 0x05, 0xFE, 0x02, 0xFE, 0xDC, 0xCC, 0x59, 0xE7, 0x00, 0x00, 0x00,
       0x00, b'I', b'E', b'N', b'D', 0xAE, 0x42, 0x60, 0x82,
     ];
     let webp = image_to_webp(&png).expect("1x1 png must encode");

@@ -60,7 +60,10 @@ fn found(url: &str) -> Response {
       StatusCode::FOUND,
       [
         (header::LOCATION, location),
-        (header::CACHE_CONTROL, HeaderValue::from_static("private, max-age=0")),
+        (
+          header::CACHE_CONTROL,
+          HeaderValue::from_static("private, max-age=0"),
+        ),
       ],
     )
       .into_response(),

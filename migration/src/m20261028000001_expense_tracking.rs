@@ -113,27 +113,11 @@ impl MigrationTrait for Migration {
           .col(ColumnDef::new(Expenses::Date).date().not_null())
           .col(ColumnDef::new(Expenses::Label).string_len(120).null())
           .col(ColumnDef::new(Expenses::UsdCents).big_integer().null())
-          .col(
-            ColumnDef::new(Expenses::InrPaise)
-              .big_integer()
-              .not_null(),
-          )
+          .col(ColumnDef::new(Expenses::InrPaise).big_integer().not_null())
           .col(ColumnDef::new(Expenses::InvoiceLink).text().null())
-          .col(
-            ColumnDef::new(Expenses::InvoiceBlob)
-              .binary()
-              .null(),
-          )
-          .col(
-            ColumnDef::new(Expenses::InvoiceMime)
-              .string_len(64)
-              .null(),
-          )
-          .col(
-            ColumnDef::new(Expenses::InvoiceName)
-              .string_len(255)
-              .null(),
-          )
+          .col(ColumnDef::new(Expenses::InvoiceBlob).binary().null())
+          .col(ColumnDef::new(Expenses::InvoiceMime).string_len(64).null())
+          .col(ColumnDef::new(Expenses::InvoiceName).string_len(255).null())
           .col(ColumnDef::new(Expenses::CreatedBy).text().null())
           .col(
             ColumnDef::new(Expenses::CreatedAt)

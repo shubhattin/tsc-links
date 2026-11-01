@@ -157,10 +157,12 @@ pub async fn require_admin(
     return error_response(StatusCode::FORBIDDEN, "admin access required");
   }
 
-  req.extensions_mut().insert(AuthUser(Arc::new(AuthUserInner {
-    user_id: user.id,
-    email: user.email,
-  })));
+  req
+    .extensions_mut()
+    .insert(AuthUser(Arc::new(AuthUserInner {
+      user_id: user.id,
+      email: user.email,
+    })));
   next.run(req).await
 }
 
