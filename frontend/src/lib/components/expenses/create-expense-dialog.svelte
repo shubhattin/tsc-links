@@ -17,30 +17,33 @@
   import { Textarea } from '$lib/components/ui/textarea';
   import {
     createExpense,
-    createSource,
+    defaultDateForMonth,
     EXPENSE_SOURCES_QUERY_KEY,
     expensesQueryKey,
     listSources,
+    monthLabel,
     parseInrToPaise,
     parseUsdToCents,
-    todayIso,
     uploadInvoice,
     type CreateExpenseBody,
-    type ExpenseSourceDto,
   } from '$lib/expenses-api';
   import { queryClient } from '$lib/query-client';
   import Plus from '@lucide/svelte/icons/plus';
   import Search from '@lucide/svelte/icons/search';
   import { createMutation, createQuery } from '@tanstack/svelte-query';
+  import { untrack } from 'svelte';
   import { toast } from 'svelte-sonner';
 
   let {
     month,
     open,
+    initialSourceKey = '',
     onClose,
   }: {
     month: string;
     open: boolean;
+    /** Pre-selects a source (e.g. from a source card's "Add bill"). */
+    initialSourceKey?: string;
     onClose: () => void;
   } = $props();
 
@@ -53,7 +56,8 @@
     () => queryClient,
   );
 
-  const sources = $derived(sourcesQuery.data ?? []);
+  // Retired (inactive) sources can't take new bills.
+  const sources = $derived((sourcesQuery.data ?? []).filter((s) => s.active));
 
   let sourceFilter = $state('');
   const filteredSources = $derived.by(() => {
@@ -65,10 +69,7 @@
   });
 
   let sourceKey = $state('');
-  let newKey = $state('');
-  let newName = $state('');
-  let newDescription = $state('');
-  let date = $state(todayIso());
+  let date = $state('');
   let label = $state('');
   let note = $state('');
   let usd = $state('');
@@ -78,12 +79,9 @@
   let fileInput = $state<HTMLInputElement | null>(null);
 
   function reset() {
-    sourceKey = '';
+    sourceKey = initialSourceKey;
     sourceFilter = '';
-    newKey = '';
-    newName = '';
-    newDescription = '';
-    date = todayIso();
+    date = defaultDateForMonth(month);
     label = '';
     note = '';
     usd = '';
@@ -95,20 +93,14 @@
 
   // Fresh form every time the dialog opens.
   $effect.pre(() => {
-    if (open) reset();
+    if (open) untrack(reset);
   });
 
-  const creatingNew = $derived(sourceKey === '__new__');
   const inrPaise = $derived(parseInrToPaise(inr));
   const usdCents = $derived(usd.trim() ? parseUsdToCents(usd) : undefined);
 
   const formError = $derived.by(() => {
     if (!sourceKey) return 'Pick a source';
-    if (creatingNew) {
-      if (!newKey.trim() || !/^[a-z0-9_-]{1,32}$/.test(newKey.trim().toLowerCase()))
-        return 'New key must be 1–32 lowercase letters, digits, - or _';
-      if (!newName.trim()) return 'New source needs a name';
-    }
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return 'Pick a valid date';
     if (inrPaise == null) return 'Enter the final ₹ amount';
     if (usd.trim() && usdCents == null) return 'Dollar amount looks off';
@@ -119,18 +111,8 @@
   const mutation = createMutation(
     () => ({
       mutationFn: async () => {
-        let key = sourceKey;
-        if (creatingNew) {
-          const created: ExpenseSourceDto = await createSource({
-            key: newKey.trim().toLowerCase(),
-            name: newName.trim(),
-            description: newDescription.trim() || null,
-          });
-          await queryClient.invalidateQueries({ queryKey: EXPENSE_SOURCES_QUERY_KEY });
-          key = created.key;
-        }
         const body: CreateExpenseBody = {
-          source_key: key,
+          source_key: sourceKey,
           date,
           label: label.trim() || null,
           note: note.trim() || null,
@@ -143,11 +125,13 @@
         return entry;
       },
       onSuccess: async () => {
-        await queryClient.invalidateQueries({ queryKey: expensesQueryKey(month) });
-        toast.success('Expense recorded');
+        // The bill may land in a different month than the one on screen.
+        await queryClient.invalidateQueries({ queryKey: ['expenses'] });
+        await queryClient.invalidateQueries({ queryKey: EXPENSE_SOURCES_QUERY_KEY });
+        toast.success('Bill added');
         onClose();
       },
-      onError: (e: Error) => toast.error('Could not record expense', { description: e.message }),
+      onError: (e: Error) => toast.error('Could not add bill', { description: e.message }),
     }),
     () => queryClient,
   );
@@ -162,8 +146,12 @@
 <Dialog {open} onOpenChange={(isOpen) => !isOpen && onClose()}>
   <DialogContent class="max-h-[90svh] overflow-y-auto sm:max-w-lg">
     <DialogHeader>
-      <DialogTitle>Add expense</DialogTitle>
-      <DialogDescription>Charged costs land in the current month view.</DialogDescription>
+      <DialogTitle>Add bill</DialogTitle>
+      <DialogDescription>
+        Record a charge. It appears under the month of its charge date — you're viewing {monthLabel(
+          month,
+        )}.
+      </DialogDescription>
     </DialogHeader>
     <form id="create-expense-form" onsubmit={submit} class="space-y-4">
       <div class="grid gap-4 sm:grid-cols-2">
@@ -171,7 +159,7 @@
           <Label for="expense-source">Source</Label>
           <Select.Root type="single" bind:value={sourceKey}>
             <Select.Trigger id="expense-source" class="w-full">
-              {#if sourceKey && sourceKey !== '__new__'}
+              {#if sourceKey}
                 <SourceBrandIcon {sourceKey} size="sm" />
               {/if}
               <Select.Value placeholder="Pick a source" />
@@ -199,10 +187,10 @@
                 {#each filteredSources as source (source.key)}
                   <Select.Item value={source.key} label={source.name}>
                     <SourceBrandIcon sourceKey={source.key} size="sm" />
-                    <span class="min-w-0">
+                    <span class="min-w-0 flex-1">
                       <span class="block truncate">{source.name}</span>
                       {#if source.description}
-                        <span class="block truncate text-xs text-muted-foreground">
+                        <span class="line-clamp-1 text-xs break-words text-muted-foreground">
                           {source.description}
                         </span>
                       {/if}
@@ -215,59 +203,11 @@
                   </p>
                 {/if}
               </Select.Group>
-              <Select.Separator />
-              <Select.Item value="__new__" label="New source…">
-                <span
-                  aria-hidden="true"
-                  class="grid size-7 shrink-0 place-items-center rounded-xl border border-dashed text-lg leading-none text-primary"
-                  >+</span
-                >
-                New source…
-              </Select.Item>
             </Select.Content>
           </Select.Root>
         </div>
         <ExpenseDateField id="expense-date" bind:value={date} />
       </div>
-
-      {#if creatingNew}
-        <div class="grid gap-4 rounded-xl border border-dashed p-4 sm:grid-cols-2">
-          <div class="space-y-1.5">
-            <Label for="new-source-key">Source key</Label>
-            <Input
-              id="new-source-key"
-              class="font-mono"
-              maxlength={32}
-              autocomplete="off"
-              spellcheck={false}
-              placeholder="my-vendor"
-              bind:value={newKey}
-            />
-          </div>
-          <div class="space-y-1.5">
-            <Label for="new-source-name">Display name</Label>
-            <Input
-              id="new-source-name"
-              maxlength={64}
-              autocomplete="off"
-              placeholder="My Vendor"
-              bind:value={newName}
-            />
-          </div>
-          <div class="space-y-1.5 sm:col-span-2">
-            <Label for="new-source-desc"
-              >Description <span class="font-normal text-muted-foreground">(optional)</span></Label
-            >
-            <Input
-              id="new-source-desc"
-              maxlength={2000}
-              autocomplete="off"
-              placeholder="What is this for?"
-              bind:value={newDescription}
-            />
-          </div>
-        </div>
-      {/if}
 
       <div class="grid gap-4 sm:grid-cols-3">
         <div class="space-y-1.5">
@@ -362,7 +302,7 @@
       <Button variant="outline" onclick={onClose}>Cancel</Button>
       <Button type="submit" form="create-expense-form" disabled={!!formError || mutation.isPending}>
         {#if mutation.isPending}<Spinner />{/if}
-        <Plus /> Record expense
+        <Plus /> Add bill
       </Button>
     </DialogFooter>
   </DialogContent>

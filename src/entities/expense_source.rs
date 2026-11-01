@@ -19,6 +19,8 @@ pub struct Model {
   pub name: String,
   #[sea_orm(column_type = "Text", nullable)]
   pub description: Option<String>,
+  /// Retired sources stay (they may have bills) but are hidden in the UI.
+  pub active: bool,
   #[sea_orm(column_name = "createdAt")]
   pub created_at: DateTimeWithTimeZone,
   #[sea_orm(column_name = "updatedAt")]

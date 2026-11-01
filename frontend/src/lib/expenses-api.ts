@@ -259,6 +259,11 @@ export function todayIso(): string {
   return `${now.getFullYear()}-${m}-${d}`;
 }
 
+/** Default date for a new bill while viewing `month`: today, else the month's first day. */
+export function defaultDateForMonth(month: string): string {
+  return month === currentMonth() ? todayIso() : `${month}-01`;
+}
+
 /* ---------------- aggregation ---------------- */
 
 export interface SourceMonthTotal {

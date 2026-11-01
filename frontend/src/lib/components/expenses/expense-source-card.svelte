@@ -21,6 +21,7 @@
   import FileDown from '@lucide/svelte/icons/file-down';
   import FileText from '@lucide/svelte/icons/file-text';
   import Pencil from '@lucide/svelte/icons/pencil';
+  import Plus from '@lucide/svelte/icons/plus';
   import Receipt from '@lucide/svelte/icons/receipt';
   import Trash2 from '@lucide/svelte/icons/trash-2';
   import { createMutation } from '@tanstack/svelte-query';
@@ -31,11 +32,14 @@
     month,
     onEdit,
     onView,
+    onAddBill,
   }: {
     total: SourceMonthTotal;
     month: string;
     onEdit: (entry: ExpenseDto) => void;
     onView: (entry: ExpenseDto) => void;
+    /** Shown on cards without any entry this month. */
+    onAddBill?: (sourceKey: string) => void;
   } = $props();
 
   let expanded = $state(false);
@@ -80,7 +84,7 @@
   }
 </script>
 
-<Card>
+<Card class={total.source.active ? '' : 'opacity-75'}>
   <CardContent class="px-4 py-4 sm:px-5">
     <div class="flex items-center gap-3">
       <SourceBrandIcon sourceKey={total.source.key}>
@@ -88,139 +92,151 @@
       </SourceBrandIcon>
       <div class="min-w-0 flex-1">
         <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
-          <h3 class="truncate text-sm font-semibold sm:text-base">{total.source.name}</h3>
+          <h3 class="min-w-0 truncate text-sm font-semibold sm:text-base">{total.source.name}</h3>
+          {#if !total.source.active}
+            <Badge variant="outline" class="shrink-0">Inactive</Badge>
+          {/if}
           {#each total.labels as label (label)}
-            <Badge variant="secondary" class="shrink-0">{label}</Badge>
+            <Badge variant="secondary" class="max-w-40 shrink-0 truncate">{label}</Badge>
           {/each}
         </div>
         {#if total.source.description}
-          <p class="truncate text-xs text-muted-foreground">{total.source.description}</p>
+          <p class="line-clamp-2 text-xs break-words text-muted-foreground">
+            {total.source.description}
+          </p>
         {/if}
       </div>
-      <div class="shrink-0 text-right">
-        <p class="text-sm font-bold tabular-nums sm:text-lg">{formatInr(total.totalInr)}</p>
-        {#if total.totalUsd != null}
-          <p class="text-xs text-muted-foreground tabular-nums">{formatUsd(total.totalUsd)}</p>
+      {#if total.entries.length === 0}
+        {#if onAddBill && total.source.active}
+          <Button
+            variant="outline"
+            size="sm"
+            class="shrink-0"
+            onclick={() => onAddBill(total.source.key)}
+          >
+            <Plus /> Add bill
+          </Button>
+        {:else}
+          <span class="shrink-0 text-xs text-muted-foreground">No bill</span>
         {/if}
-      </div>
-      <Button
-        variant="ghost"
-        size="icon-sm"
-        aria-label={expanded ? 'Hide details' : 'Show details'}
-        aria-expanded={expanded}
-        onclick={() => (expanded = !expanded)}
-      >
-        <EllipsisVertical />
-      </Button>
+      {:else}
+        <div class="shrink-0 text-right">
+          <p class="text-sm font-bold tabular-nums sm:text-lg">{formatInr(total.totalInr)}</p>
+          {#if total.totalUsd != null}
+            <p class="text-xs text-muted-foreground tabular-nums">{formatUsd(total.totalUsd)}</p>
+          {/if}
+        </div>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          aria-label={expanded ? 'Hide details' : 'Show details'}
+          aria-expanded={expanded}
+          onclick={() => (expanded = !expanded)}
+        >
+          <EllipsisVertical />
+        </Button>
+      {/if}
     </div>
 
-    {#if expanded}
-      {#if total.entries.length === 0}
-        <p class="mt-3 rounded-lg bg-muted/50 px-3 py-2 text-center text-xs text-muted-foreground">
-          No charges this month.
-        </p>
-      {:else}
-        <ul class="mt-3 divide-y rounded-xl border">
-          {#each total.entries as entry (entry.id)}
-            <li class="flex items-center gap-2 px-3 py-2.5 text-sm">
-              <div class="min-w-0 flex-1">
-                <div class="flex flex-wrap items-center gap-x-2">
-                  <span class="font-mono text-xs text-muted-foreground"
-                    >{formatDay(entry.date)}</span
-                  >
-                  {#if entry.label}
-                    <Badge variant="outline" class="text-[11px]">{entry.label}</Badge>
-                  {/if}
-                </div>
-                <p class="mt-0.5 tabular-nums">
-                  <span class="font-semibold">{formatInr(entry.inr_paise)}</span>
-                  {#if entry.usd_cents != null}
-                    <span class="ml-1.5 text-xs text-muted-foreground">
-                      {formatUsd(entry.usd_cents)}
-                    </span>
-                  {/if}
-                </p>
-                {#if entry.note}
-                  <p class="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{entry.note}</p>
+    {#if expanded && total.entries.length > 0}
+      <ul class="mt-3 divide-y rounded-xl border">
+        {#each total.entries as entry (entry.id)}
+          <li class="flex items-center gap-2 px-3 py-2.5 text-sm">
+            <div class="min-w-0 flex-1">
+              <div class="flex flex-wrap items-center gap-x-2">
+                <span class="font-mono text-xs text-muted-foreground">{formatDay(entry.date)}</span>
+                {#if entry.label}
+                  <Badge variant="outline" class="text-[11px]">{entry.label}</Badge>
                 {/if}
               </div>
-              <div class="flex shrink-0 items-center gap-0.5">
-                {#if entry.invoice_link}
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    aria-label="Open invoice link"
-                    href={entry.invoice_link}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    <ExternalLink />
-                  </Button>
+              <p class="mt-0.5 tabular-nums">
+                <span class="font-semibold">{formatInr(entry.inr_paise)}</span>
+                {#if entry.usd_cents != null}
+                  <span class="ml-1.5 text-xs text-muted-foreground">
+                    {formatUsd(entry.usd_cents)}
+                  </span>
                 {/if}
-                {#if entry.has_invoice}
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    aria-label={entry.invoice_name ? `View ${entry.invoice_name}` : 'View invoice'}
-                    title="View invoice"
-                    onclick={() => onView(entry)}
-                  >
-                    <Eye />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    aria-label={entry.invoice_name ?? 'Download invoice'}
-                    title={entry.invoice_name ?? 'Download invoice'}
-                    disabled={downloadingId === entry.id}
-                    onclick={() => download(entry)}
-                  >
-                    {#if entry.invoice_name?.toLowerCase().endsWith('.pdf')}
-                      <FileText />
-                    {:else}
-                      <FileDown />
-                    {/if}
-                  </Button>
-                {/if}
+              </p>
+              {#if entry.note}
+                <p class="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{entry.note}</p>
+              {/if}
+            </div>
+            <div class="flex shrink-0 items-center gap-0.5">
+              {#if entry.invoice_link}
                 <Button
                   variant="ghost"
                   size="icon-sm"
-                  aria-label="Edit expense"
-                  onclick={() => onEdit(entry)}
+                  aria-label="Open invoice link"
+                  href={entry.invoice_link}
+                  target="_blank"
+                  rel="noopener noreferrer"
                 >
-                  <Pencil />
+                  <ExternalLink />
                 </Button>
-                {#if confirmingId === entry.id}
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    class="h-7 px-2 text-xs"
-                    disabled={mutation.isPending}
-                    onclick={() => mutation.mutate({ id: entry.id, action: 'delete' })}
-                  >
-                    Confirm?
-                  </Button>
-                {:else}
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    class="hover:bg-destructive/10 hover:text-destructive"
-                    aria-label="Delete expense"
-                    onclick={() => {
-                      confirmingId = entry.id;
-                      setTimeout(() => {
-                        if (confirmingId === entry.id) confirmingId = null;
-                      }, 4000);
-                    }}
-                  >
-                    <Trash2 />
-                  </Button>
-                {/if}
-              </div>
-            </li>
-          {/each}
-        </ul>
-      {/if}
+              {/if}
+              {#if entry.has_invoice}
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label={entry.invoice_name ? `View ${entry.invoice_name}` : 'View invoice'}
+                  title="View invoice"
+                  onclick={() => onView(entry)}
+                >
+                  <Eye />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label={entry.invoice_name ?? 'Download invoice'}
+                  title={entry.invoice_name ?? 'Download invoice'}
+                  disabled={downloadingId === entry.id}
+                  onclick={() => download(entry)}
+                >
+                  {#if entry.invoice_name?.toLowerCase().endsWith('.pdf')}
+                    <FileText />
+                  {:else}
+                    <FileDown />
+                  {/if}
+                </Button>
+              {/if}
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label="Edit expense"
+                onclick={() => onEdit(entry)}
+              >
+                <Pencil />
+              </Button>
+              {#if confirmingId === entry.id}
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  class="h-7 px-2 text-xs"
+                  disabled={mutation.isPending}
+                  onclick={() => mutation.mutate({ id: entry.id, action: 'delete' })}
+                >
+                  Confirm?
+                </Button>
+              {:else}
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  class="hover:bg-destructive/10 hover:text-destructive"
+                  aria-label="Delete expense"
+                  onclick={() => {
+                    confirmingId = entry.id;
+                    setTimeout(() => {
+                      if (confirmingId === entry.id) confirmingId = null;
+                    }, 4000);
+                  }}
+                >
+                  <Trash2 />
+                </Button>
+              {/if}
+            </div>
+          </li>
+        {/each}
+      </ul>
     {/if}
   </CardContent>
 </Card>

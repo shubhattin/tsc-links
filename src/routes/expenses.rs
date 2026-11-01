@@ -26,8 +26,10 @@ use axum::extract::{Multipart, Path, Query, State};
 use axum::http::{HeaderMap, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use chrono::NaiveDate;
+use sea_orm::sea_query::Expr;
 use sea_orm::{
-  ActiveModelTrait, ColumnTrait, DbErr, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder, Set,
+  ActiveModelTrait, ColumnTrait, DbErr, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder,
+  QuerySelect, Set,
 };
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
@@ -64,16 +66,24 @@ pub struct ExpenseSourceDto {
   /// Display name, e.g. `Vercel`.
   pub name: String,
   pub description: Option<String>,
+  /// Inactive sources are retired vendors: kept (they may have bills) but
+  /// hidden away in the UI.
+  pub active: bool,
+  /// How many expenses reference this source. While it is non-zero the source
+  /// can neither be deleted nor have its key changed.
+  pub expense_count: i64,
   pub created_at: String,
   pub updated_at: String,
 }
 
-impl From<expense_source::Model> for ExpenseSourceDto {
-  fn from(m: expense_source::Model) -> Self {
+impl ExpenseSourceDto {
+  fn new(m: expense_source::Model, expense_count: i64) -> Self {
     Self {
       key: m.key,
       name: m.name,
       description: m.description,
+      active: m.active,
+      expense_count,
       created_at: m.created_at.to_rfc3339(),
       updated_at: m.updated_at.to_rfc3339(),
     }
@@ -94,14 +104,19 @@ pub struct CreateSourceBody {
   /// Display name (max 64 chars).
   pub name: String,
   pub description: Option<String>,
+  /// Defaults to `true`.
+  pub active: Option<bool>,
 }
 
 /// `PATCH /api/expense-sources/{key}` body — omitted fields are unchanged,
 /// empty/null description clears it.
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct UpdateSourceBody {
+  /// New key. Only allowed while the source has no expenses (409 otherwise).
+  pub key: Option<String>,
   pub name: Option<String>,
   pub description: Option<String>,
+  pub active: Option<bool>,
 }
 
 fn normalize_source_key(raw: &str) -> Result<String, String> {
@@ -173,17 +188,41 @@ pub fn openapi_router() -> OpenApiRouter<AppState> {
     )
 )]
 pub async fn list_sources(State(state): State<AppState>) -> Response {
-  match expense_source::Entity::find()
-    .order_by_asc(expense_source::Column::Name)
-    .all(&state.db)
-    .await
-  {
-    Ok(rows) => Json(ExpenseSourcesListResponse {
-      sources: rows.into_iter().map(ExpenseSourceDto::from).collect(),
-    })
-    .into_response(),
-    Err(e) => internal_error(e),
-  }
+  let (rows, counts) = match tokio::try_join!(
+    expense_source::Entity::find()
+      .order_by_asc(expense_source::Column::Name)
+      .all(&state.db),
+    expense_counts(&state),
+  ) {
+    Ok(v) => v,
+    Err(e) => return internal_error(e),
+  };
+  Json(ExpenseSourcesListResponse {
+    sources: rows
+      .into_iter()
+      .map(|row| {
+        let count = counts.get(&row.key).copied().unwrap_or(0);
+        ExpenseSourceDto::new(row, count)
+      })
+      .collect(),
+  })
+  .into_response()
+}
+
+/// Expenses per source key (sources without any are absent from the map).
+async fn expense_counts(state: &AppState) -> Result<HashMap<String, i64>, DbErr> {
+  Ok(
+    expense::Entity::find()
+      .select_only()
+      .column(expense::Column::SourceKey)
+      .column_as(expense::Column::Id.count(), "count")
+      .group_by(expense::Column::SourceKey)
+      .into_tuple::<(String, i64)>()
+      .all(&state.db)
+      .await?
+      .into_iter()
+      .collect(),
+  )
 }
 
 /// `POST /api/expense-sources` — register a custom source.
@@ -223,6 +262,7 @@ pub async fn create_source(
     key: Set(key.clone()),
     name: Set(name),
     description: Set(description),
+    active: Set(body.active.unwrap_or(true)),
     created_at: Set(now),
     updated_at: Set(now),
     ..Default::default()
@@ -232,7 +272,7 @@ pub async fn create_source(
       .one(&state.db)
       .await
     {
-      Ok(Some(row)) => (StatusCode::CREATED, Json(ExpenseSourceDto::from(row))).into_response(),
+      Ok(Some(row)) => (StatusCode::CREATED, Json(ExpenseSourceDto::new(row, 0))).into_response(),
       Ok(None) => internal_error(DbErr::RecordNotFound("source vanished".to_string())),
       Err(e) => internal_error(e),
     },
@@ -244,7 +284,8 @@ pub async fn create_source(
   }
 }
 
-/// `PATCH /api/expense-sources/{key}` — rename / edit description.
+/// `PATCH /api/expense-sources/{key}` — edit name / description / active, or
+/// change the key while the source has no entries.
 #[utoipa::path(
     patch,
     path = "/api/expense-sources/{key}",
@@ -259,6 +300,7 @@ pub async fn create_source(
         (status = 401, description = "Not authenticated", body = ErrorBody),
         (status = 403, description = "Not an admin", body = ErrorBody),
         (status = 404, description = "Source not found", body = ErrorBody),
+        (status = 409, description = "Key in use, or source has entries", body = ErrorBody),
     )
 )]
 pub async fn update_source(
@@ -266,7 +308,67 @@ pub async fn update_source(
   Path(key): Path<String>,
   Json(body): Json<UpdateSourceBody>,
 ) -> Response {
-  let row = match expense_source::Entity::find_by_id(key.trim())
+  let old_key = key.trim().to_string();
+  match expense_source::Entity::find_by_id(&old_key)
+    .one(&state.db)
+    .await
+  {
+    Ok(Some(_)) => {}
+    Ok(None) => return error_response(StatusCode::NOT_FOUND, "source not found"),
+    Err(e) => return internal_error(e),
+  }
+
+  // Validate everything up front so a bad field never leaves a half-applied
+  // update behind.
+  let name = match body.name.as_deref().map(normalize_name).transpose() {
+    Ok(n) => n,
+    Err(msg) => return bad_request(msg),
+  };
+  let description = if body.description.is_some() {
+    match normalize_description(body.description.as_deref()) {
+      Ok(d) => Some(d),
+      Err(msg) => return bad_request(msg),
+    }
+  } else {
+    None
+  };
+  let new_key = match body.key.as_deref().map(normalize_source_key) {
+    None => None,
+    Some(Ok(k)) if k == old_key => None,
+    Some(Ok(k)) => Some(k),
+    Some(Err(msg)) => return bad_request(msg),
+  };
+
+  // Renaming the key is only safe while nothing references it.
+  let mut current_key = old_key.clone();
+  if let Some(new_key) = new_key {
+    match source_has_entries(&state, &old_key).await {
+      Ok(true) => return key_locked(),
+      Ok(false) => {}
+      Err(e) => return internal_error(e),
+    }
+    // `expense_sources.key` is the primary key, so rename it with a plain
+    // UPDATE. The FK from `expenses` has no ON UPDATE action, so an entry
+    // inserted in the meantime fails the statement with a FK violation.
+    match expense_source::Entity::update_many()
+      .col_expr(expense_source::Column::Key, Expr::value(new_key.clone()))
+      .filter(expense_source::Column::Key.eq(old_key.as_str()))
+      .exec(&state.db)
+      .await
+    {
+      Ok(_) => current_key = new_key,
+      Err(e) if is_unique_violation(&e) => {
+        return error_response(
+          StatusCode::CONFLICT,
+          format!("source '{new_key}' already exists"),
+        );
+      }
+      Err(e) if is_fk_violation(&e) => return key_locked(),
+      Err(e) => return internal_error(e),
+    }
+  }
+
+  let row = match expense_source::Entity::find_by_id(&current_key)
     .one(&state.db)
     .await
   {
@@ -275,23 +377,31 @@ pub async fn update_source(
     Err(e) => return internal_error(e),
   };
   let mut model: expense_source::ActiveModel = row.into();
-  if let Some(raw) = body.name.as_deref() {
-    match normalize_name(raw) {
-      Ok(name) => model.name = Set(name),
-      Err(msg) => return bad_request(msg),
-    }
+  if let Some(name) = name {
+    model.name = Set(name);
   }
-  if body.description.is_some() {
-    match normalize_description(body.description.as_deref()) {
-      Ok(description) => model.description = Set(description),
-      Err(msg) => return bad_request(msg),
-    }
+  if let Some(description) = description {
+    model.description = Set(description);
+  }
+  if let Some(active) = body.active {
+    model.active = Set(active);
   }
   model.updated_at = Set(chrono::Utc::now().fixed_offset());
-  match model.update(&state.db).await {
-    Ok(row) => Json(ExpenseSourceDto::from(row)).into_response(),
+  let saved = match model.update(&state.db).await {
+    Ok(row) => row,
+    Err(e) => return internal_error(e),
+  };
+  match source_has_entries_count(&state, &saved.key).await {
+    Ok(count) => Json(ExpenseSourceDto::new(saved, count)).into_response(),
     Err(e) => internal_error(e),
   }
+}
+
+fn key_locked() -> Response {
+  error_response(
+    StatusCode::CONFLICT,
+    "source has expense entries; its key can no longer be changed",
+  )
 }
 
 /// `DELETE /api/expense-sources/{key}` — refused (409) while entries exist.
@@ -353,6 +463,15 @@ async fn source_has_entries(state: &AppState, key: &str) -> Result<bool, DbErr> 
       .count(&state.db)
       .await?
       > 0,
+  )
+}
+
+async fn source_has_entries_count(state: &AppState, key: &str) -> Result<i64, DbErr> {
+  Ok(
+    expense::Entity::find()
+      .filter(expense::Column::SourceKey.eq(key))
+      .count(&state.db)
+      .await? as i64,
   )
 }
 
