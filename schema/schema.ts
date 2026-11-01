@@ -53,6 +53,11 @@ export const expenseSources = pgTable('expense_sources', {
   name: varchar({ length: 64 }).notNull(),
   /** Optional one-liner */
   description: text(),
+  /**
+   * Sources can't be removed once they have bills (`ON DELETE RESTRICT`), so
+   * retired vendors are marked inactive instead — the UI tucks them away.
+   */
+  active: boolean().default(true).notNull(),
   createdAt: timestamp({ withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp({ withTimezone: true }).defaultNow().notNull(),
 });
