@@ -87,7 +87,7 @@
   let editing = $state<ExpenseDto | null>(null);
   let viewing = $state<ExpenseDto | null>(null);
   let creating = $state(false);
-  /** `billed` = entries with a $ amount, `unbilled` = ₹-only entries. */
+  /** `billed` = entries with a non-zero charge, `unbilled` = ₹0 entries (no bill at all). */
   let billedFilter = $state<'all' | 'billed' | 'unbilled'>('billed');
 
   const sourcesQuery = createQuery(
@@ -114,8 +114,8 @@
       billedFilter === 'all'
         ? true
         : billedFilter === 'billed'
-          ? e.usd_cents != null
-          : e.usd_cents == null,
+          ? e.inr_paise !== 0
+          : e.inr_paise === 0,
     ),
   );
   const totals = $derived(
@@ -264,8 +264,8 @@
                   {billedFilter === 'all'
                     ? 'Add your first expense to get started.'
                     : billedFilter === 'billed'
-                      ? 'No entries with a billed $ amount this month.'
-                      : 'Every entry this month has a billed $ amount.'}
+                      ? 'No entries with a charge this month.'
+                      : 'Every entry this month has a charge.'}
                 </EmptyDescription>
               </EmptyHeader>
               {#if billedFilter === 'all'}
