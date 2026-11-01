@@ -6,6 +6,7 @@
   import NoAccess from '$lib/components/auth/no-access.svelte';
   import SignInCard from '$lib/components/auth/sign-in-card.svelte';
   import CreateExpenseDialog from '$lib/components/expenses/create-expense-dialog.svelte';
+  import CreateSourceDialog from '$lib/components/expenses/create-source-dialog.svelte';
   import EditExpenseDialog from '$lib/components/expenses/edit-expense-dialog.svelte';
   import ExpenseSourceCard from '$lib/components/expenses/expense-source-card.svelte';
   import InvoiceViewerDialog from '$lib/components/expenses/invoice-viewer-dialog.svelte';
@@ -87,6 +88,7 @@
   let editing = $state<ExpenseDto | null>(null);
   let viewing = $state<ExpenseDto | null>(null);
   let creating = $state(false);
+  let creatingSource = $state(false);
   /** `billed` = entries with a non-zero charge, `unbilled` = ₹0 entries (no bill at all). */
   let billedFilter = $state<'all' | 'billed' | 'unbilled'>('billed');
 
@@ -202,6 +204,9 @@
                   class={expensesQuery.isFetching ? 'animate-spin motion-reduce:animate-none' : ''}
                 />
               </Button>
+              <Button variant="outline" onclick={() => (creatingSource = true)}>
+                <Plus /> Add source
+              </Button>
               <Button onclick={() => (creating = true)}><Plus /> Add expense</Button>
             </div>
           </div>
@@ -291,5 +296,6 @@
 </div>
 
 <CreateExpenseDialog {month} open={creating} onClose={() => (creating = false)} />
+<CreateSourceDialog open={creatingSource} onClose={() => (creatingSource = false)} />
 <EditExpenseDialog entry={editing} {month} onClose={() => (editing = null)} />
 <InvoiceViewerDialog entry={viewing} onClose={() => (viewing = null)} />
