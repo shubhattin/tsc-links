@@ -20,22 +20,13 @@
   >
     <ChevronLeft />
   </Button>
-  <label class="relative flex items-center gap-2 rounded-lg px-1 py-1 font-medium tabular-nums">
+  <span
+    class="flex items-center gap-2 rounded-lg px-1 py-1 font-medium tabular-nums"
+    aria-live="polite"
+  >
     <Calendar class="size-4 text-muted-foreground" />
     <span class="min-w-32 text-center text-sm sm:text-base">{monthLabel(month)}</span>
-    <input
-      type="month"
-      class="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-      aria-label="Pick month"
-      value={month}
-      max={thisMonth}
-      onchange={(e) => {
-        const value = e.currentTarget.value;
-        if (value) onChange(value);
-        e.currentTarget.value = month;
-      }}
-    />
-  </label>
+  </span>
   <Button
     variant="ghost"
     size="icon"

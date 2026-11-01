@@ -40,6 +40,7 @@
   import TriangleAlert from '@lucide/svelte/icons/triangle-alert';
   import Wallet from '@lucide/svelte/icons/wallet';
   import { createQuery } from '@tanstack/svelte-query';
+  import { untrack } from 'svelte';
 
   // Better Auth session store. UX gate only — the Rust API re-checks the
   // session cookie on every request.
@@ -50,55 +51,36 @@
   // - no param (or an invalid one) → current month, canonical URL has no param
   // - `?month=<current month>` → stripped to the canonical param-less URL
   // - any other valid month → kept in the URL so it stays shareable
-  let month = $state(currentMonth());
-  let monthSyncedFromUrl = $state(false);
+  // `month` is local state so stepping feels instant; `selectMonth` pushes the
+  // matching URL, and the effect below only adopts *external* URL changes
+  // (back/forward navigation, pasted links) — it deliberately does not track
+  // `month`, otherwise it would revert a step before the `goto` lands.
+  let month = $state(normalizeMonthParam(page.url.searchParams.get(MONTH_PARAM)) ?? currentMonth());
 
-  // URL → state: initial hydration plus back/forward navigation.
+  function selectMonth(next: string) {
+    if (next === month) return;
+    month = next;
+    const target = next === currentMonth() ? '/expenses' : `/expenses?${MONTH_PARAM}=${next}`;
+    void goto(target, { replaceState: true, keepFocus: true, noScroll: true });
+  }
+
+  // URL → state: adopt external URL changes and canonicalize the address bar
+  // (invalid params, redundant current-month params, `MM-YYYY` shape).
   $effect(() => {
     const raw = page.url.searchParams.get(MONTH_PARAM);
+    const today = currentMonth();
     const normalized = normalizeMonthParam(raw);
-    const today = currentMonth();
-    if (!monthSyncedFromUrl) {
+    if ((normalized ?? today) !== untrack(() => month)) month = normalized ?? today;
+    if (raw != null && raw !== '') {
       if (normalized == null || normalized === today) {
-        month = today;
-        if (raw != null && raw !== '') {
-          void goto('/expenses', { replaceState: true, keepFocus: true, noScroll: true });
-        }
-      } else {
-        month = normalized;
-        if (raw !== normalized) {
-          void goto(`/expenses?${MONTH_PARAM}=${normalized}`, {
-            replaceState: true,
-            keepFocus: true,
-            noScroll: true,
-          });
-        }
-      }
-      monthSyncedFromUrl = true;
-      return;
-    }
-    if (normalized == null) {
-      if (month !== today) month = today;
-    } else if (normalized !== month) {
-      month = normalized;
-    }
-  });
-
-  // State → URL: keep the address bar (and shared links) in sync.
-  $effect(() => {
-    if (!monthSyncedFromUrl) return;
-    const today = currentMonth();
-    const raw = page.url.searchParams.get(MONTH_PARAM);
-    if (month === today) {
-      if (raw != null && raw !== '') {
         void goto('/expenses', { replaceState: true, keepFocus: true, noScroll: true });
+      } else if (raw !== normalized) {
+        void goto(`/expenses?${MONTH_PARAM}=${normalized}`, {
+          replaceState: true,
+          keepFocus: true,
+          noScroll: true,
+        });
       }
-    } else if (raw !== month) {
-      void goto(`/expenses?${MONTH_PARAM}=${month}`, {
-        replaceState: true,
-        keepFocus: true,
-        noScroll: true,
-      });
     }
   });
 
@@ -208,7 +190,7 @@
                   </button>
                 {/each}
               </div>
-              <MonthPicker {month} onChange={(m) => (month = m)} />
+              <MonthPicker {month} onChange={selectMonth} />
               <Button
                 variant="ghost"
                 size="icon"
