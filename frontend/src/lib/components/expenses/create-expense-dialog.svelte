@@ -128,10 +128,10 @@
         // The bill may land in a different month than the one on screen.
         await queryClient.invalidateQueries({ queryKey: ['expenses'] });
         await queryClient.invalidateQueries({ queryKey: EXPENSE_SOURCES_QUERY_KEY });
-        toast.success('Bill added');
+        toast.success('Expense added');
         onClose();
       },
-      onError: (e: Error) => toast.error('Could not add bill', { description: e.message }),
+      onError: (e: Error) => toast.error('Could not add expense', { description: e.message }),
     }),
     () => queryClient,
   );
@@ -146,7 +146,7 @@
 <Dialog {open} onOpenChange={(isOpen) => !isOpen && onClose()}>
   <DialogContent class="max-h-[90svh] overflow-y-auto sm:max-w-lg">
     <DialogHeader>
-      <DialogTitle>Add bill</DialogTitle>
+      <DialogTitle>Add expense</DialogTitle>
       <DialogDescription>
         Record a charge. It appears under the month of its charge date — you're viewing {monthLabel(
           month,
@@ -302,7 +302,7 @@
       <Button variant="outline" onclick={onClose}>Cancel</Button>
       <Button type="submit" form="create-expense-form" disabled={!!formError || mutation.isPending}>
         {#if mutation.isPending}<Spinner />{/if}
-        <Plus /> Add bill
+        <Plus /> Add expense
       </Button>
     </DialogFooter>
   </DialogContent>

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import CreateSourceDialog from '$lib/components/expenses/create-source-dialog.svelte';
   import DeleteSourceDialog from '$lib/components/expenses/delete-source-dialog.svelte';
   import EditSourceDialog from '$lib/components/expenses/edit-source-dialog.svelte';
   import SourceBrandIcon from '$lib/components/expenses/source-brand-icon.svelte';
@@ -39,11 +40,7 @@
   import { createMutation, createQuery } from '@tanstack/svelte-query';
   import { toast } from 'svelte-sonner';
 
-  let {
-    open,
-    onClose,
-    onAddSource,
-  }: { open: boolean; onClose: () => void; onAddSource: () => void } = $props();
+  let { open, onClose }: { open: boolean; onClose: () => void } = $props();
 
   const sourcesQuery = createQuery(
     () => ({
@@ -58,6 +55,7 @@
   const inactiveCount = $derived(sources.filter((s) => !s.active).length);
 
   let search = $state('');
+  let adding = $state(false);
   let editing = $state<ExpenseSourceDto | null>(null);
   let deleting = $state<ExpenseSourceDto | null>(null);
 
@@ -119,7 +117,7 @@
           bind:value={search}
         />
       </div>
-      <Button variant="outline" class="shrink-0" onclick={onAddSource}>
+      <Button variant="outline" class="shrink-0" onclick={() => (adding = true)}>
         <Plus /> Add source
       </Button>
     </div>
@@ -231,5 +229,8 @@
   </DialogContent>
 </Dialog>
 
+<!-- Nested dialogs portal to <body> after this one's, so they stack on top. Each source
+     mutation invalidates the shared sources query, which refreshes the grid above. -->
+<CreateSourceDialog open={adding} onClose={() => (adding = false)} />
 <EditSourceDialog source={editing} onClose={() => (editing = null)} />
 <DeleteSourceDialog source={deleting} onClose={() => (deleting = null)} />
