@@ -210,20 +210,8 @@
               <Button variant="outline" onclick={() => (managing = true)}>
                 <Layers /> Manage sources
               </Button>
-              <Button variant="outline" onclick={() => (creatingSource = true)}>
-                <Plus /> Add source
-              </Button>
-              <Button class="h-10 gap-2.5 pr-4 pl-2" onclick={() => addBill()}>
-                <span
-                  class="grid size-6 place-items-center rounded-xl bg-primary-foreground/15"
-                  aria-hidden="true"
-                >
-                  <ReceiptText class="size-3.5" />
-                </span>
-                <span class="flex flex-col items-start text-left leading-tight">
-                  <span class="text-sm font-semibold">Add bill</span>
-                  <span class="text-[11px] font-normal opacity-75">for {monthLabel(month)}</span>
-                </span>
+              <Button variant="outline" onclick={() => addBill()}>
+                <Plus /> Add expense
               </Button>
             </div>
           </div>
@@ -413,10 +401,6 @@
   onClose={() => (creating = false)}
 />
 <CreateSourceDialog open={creatingSource} onClose={() => (creatingSource = false)} />
-<ManageSourcesDialog
-  open={managing}
-  onClose={() => (managing = false)}
-  onAddSource={() => (creatingSource = true)}
-/>
+<ManageSourcesDialog open={managing} onClose={() => (managing = false)} />
 <EditExpenseDialog entry={editing} {month} onClose={() => (editing = null)} />
 <InvoiceViewerDialog entry={viewing} onClose={() => (viewing = null)} />
