@@ -11,7 +11,8 @@ INSERT INTO expense_sources (key, name, description) VALUES
   ('neon', 'Neon Database', 'Serverless Postgres'),
   ('misc', 'Miscellaneous', 'One-off costs that fit nowhere else'),
   ('openrouter', 'OpenRouter', 'Unified LLM API gateway'),
-  ('openai-platform', 'OpenAI Platform', 'OpenAI API: models and embeddings')
+  ('openai-platform', 'OpenAI Platform', 'OpenAI API: models and embeddings'),
+  ('anthropic', 'Anthropic', 'Claude API: models and usage')
 ON CONFLICT (key) DO UPDATE SET
   name = EXCLUDED.name,
   description = EXCLUDED.description,
