@@ -13,12 +13,14 @@
   } from '$lib/components/ui/dialog';
   import { Skeleton } from '$lib/components/ui/skeleton';
   import { invoiceObjectUrl, type ExpenseDto } from '$lib/expenses-api';
+  import Download from '@lucide/svelte/icons/download';
   import TriangleAlert from '@lucide/svelte/icons/triangle-alert';
   import { untrack } from 'svelte';
 
   let { entry, onClose }: { entry: ExpenseDto | null; onClose: () => void } = $props();
 
   let objectUrl = $state<string | null>(null);
+  let filename = $state<string>('invoice');
   let isPdf = $state(false);
   let loading = $state(false);
   let error = $state<string | null>(null);
@@ -45,12 +47,13 @@
     error = null;
     untrack(revoke);
     invoiceObjectUrl(id)
-      .then(({ url }) => {
+      .then(({ url, filename: name }) => {
         if (entry?.id !== id) {
           URL.revokeObjectURL(url);
           return;
         }
         objectUrl = url;
+        filename = entry.invoice_name ?? name;
       })
       .catch((e: unknown) => {
         error = e instanceof Error ? e.message : 'Could not load invoice';
@@ -66,15 +69,17 @@
 
 <Dialog open={entry !== null} onOpenChange={(open) => !open && onClose()}>
   <DialogContent class="sm:max-w-3xl">
-    <DialogHeader>
-      <DialogTitle class="truncate">
-        {entry?.invoice_name ?? 'Invoice'}
-      </DialogTitle>
-      <DialogDescription>
-        {#if entry}
-          {entry.source_name} · {entry.date}
-        {/if}
-      </DialogDescription>
+    <DialogHeader class="flex-row items-center gap-3 pr-8">
+      <div class="min-w-0 flex-1 space-y-1">
+        <DialogTitle class="truncate">{entry?.source_name ?? 'Invoice'}</DialogTitle>
+        <DialogDescription>{entry?.date ?? ''}</DialogDescription>
+      </div>
+      {#if isPdf && objectUrl && !loading && !error}
+        <Button variant="outline" size="sm" href={objectUrl} download={filename}>
+          <Download />
+          Download
+        </Button>
+      {/if}
     </DialogHeader>
     {#if loading}
       <Skeleton class="h-[60svh] w-full rounded-xl" />
@@ -86,7 +91,7 @@
       </div>
     {:else if isPdf}
       <iframe
-        title={entry?.invoice_name ?? 'Invoice PDF'}
+        title="Invoice PDF"
         src={objectUrl}
         class="h-[70svh] w-full rounded-xl border"
       ></iframe>
@@ -96,7 +101,7 @@
       >
         <img
           src={objectUrl}
-          alt={entry?.invoice_name ?? 'Invoice image'}
+          alt="Invoice"
           class="max-h-[68svh] w-auto rounded-lg object-contain"
         />
       </div>

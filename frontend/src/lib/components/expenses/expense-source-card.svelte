@@ -10,7 +10,6 @@
     formatDay,
     formatInr,
     formatUsd,
-    invoiceObjectUrl,
     type ExpenseDto,
     type SourceMonthTotal,
   } from '$lib/expenses-api';
@@ -18,8 +17,6 @@
   import EllipsisVertical from '@lucide/svelte/icons/ellipsis-vertical';
   import ExternalLink from '@lucide/svelte/icons/external-link';
   import Eye from '@lucide/svelte/icons/eye';
-  import FileDown from '@lucide/svelte/icons/file-down';
-  import FileText from '@lucide/svelte/icons/file-text';
   import Pencil from '@lucide/svelte/icons/pencil';
   import Plus from '@lucide/svelte/icons/plus';
   import Receipt from '@lucide/svelte/icons/receipt';
@@ -44,7 +41,6 @@
 
   let expanded = $state(false);
   let confirmingId = $state<number | null>(null);
-  let downloadingId = $state<number | null>(null);
 
   const mutation = createMutation(
     () => ({
@@ -61,27 +57,6 @@
     }),
     () => queryClient,
   );
-
-  async function download(entry: ExpenseDto) {
-    if (downloadingId) return;
-    downloadingId = entry.id;
-    try {
-      const { url, filename } = await invoiceObjectUrl(entry.id);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 30_000);
-    } catch (e) {
-      toast.error('Could not download invoice', {
-        description: e instanceof Error ? e.message : undefined,
-      });
-    } finally {
-      downloadingId = null;
-    }
-  }
 </script>
 
 <Card class={total.source.active ? '' : 'opacity-75'}>
@@ -183,20 +158,6 @@
                   onclick={() => onView(entry)}
                 >
                   <Eye />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label={entry.invoice_name ?? 'Download invoice'}
-                  title={entry.invoice_name ?? 'Download invoice'}
-                  disabled={downloadingId === entry.id}
-                  onclick={() => download(entry)}
-                >
-                  {#if entry.invoice_name?.toLowerCase().endsWith('.pdf')}
-                    <FileText />
-                  {:else}
-                    <FileDown />
-                  {/if}
                 </Button>
               {/if}
               <Button
