@@ -29,6 +29,13 @@
       "when": 1793556466664,
       "tag": "0003_add_expense_source_active",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1794614400000,
+      "tag": "0004_expense_billed_currency",
+      "breakpoints": true
     }
   ]
 }

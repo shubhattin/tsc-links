@@ -81,8 +81,13 @@ export const expenses = pgTable(
     label: varchar({ length: 120 }),
     /** Optional short explanatory note */
     note: text(),
-    /** Optional charged USD amount, in cents */
-    usdCents: bigint({ mode: 'number' }),
+    /**
+     * Optional amount as billed by the vendor, in minor units (cents) of
+     * `billedCurrency`
+     */
+    billedCents: bigint({ mode: 'number' }),
+    /** Currency of `billedCents`: `USD` (default) or `EUR` */
+    billedCurrency: varchar({ length: 3 }).default('USD').notNull(),
     /** Final charged INR amount, in paise (required) */
     inrPaise: bigint({ mode: 'number' }).notNull(),
     /** Optional external invoice URL */

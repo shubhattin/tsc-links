@@ -4,6 +4,7 @@ mod m20261028000000_initial_schema;
 mod m20261028000001_expense_tracking;
 mod m20261030000000_add_expense_note;
 mod m20261101000000_add_expense_source_active;
+mod m20261114000000_expense_billed_currency;
 
 pub struct Migrator;
 
@@ -15,6 +16,7 @@ impl MigratorTrait for Migrator {
       Box::new(m20261028000001_expense_tracking::Migration),
       Box::new(m20261030000000_add_expense_note::Migration),
       Box::new(m20261101000000_add_expense_source_active::Migration),
+      Box::new(m20261114000000_expense_billed_currency::Migration),
     ]
   }
 }

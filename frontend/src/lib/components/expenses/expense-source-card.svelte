@@ -9,7 +9,8 @@
     expensesQueryKey,
     formatDay,
     formatInr,
-    formatUsd,
+    formatBilled,
+    formatBilledTotals,
     type ExpenseDto,
     type SourceMonthTotal,
   } from '$lib/expenses-api';
@@ -97,8 +98,10 @@
       {:else}
         <div class="shrink-0 text-right">
           <p class="text-sm font-bold tabular-nums sm:text-lg">{formatInr(total.totalInr)}</p>
-          {#if total.totalUsd != null}
-            <p class="text-xs text-muted-foreground tabular-nums">{formatUsd(total.totalUsd)}</p>
+          {#if total.totalBilled.length > 0}
+            <p class="text-xs text-muted-foreground tabular-nums">
+              {formatBilledTotals(total.totalBilled)}
+            </p>
           {/if}
         </div>
         <Button
@@ -126,9 +129,9 @@
               </div>
               <p class="mt-0.5 tabular-nums">
                 <span class="font-semibold">{formatInr(entry.inr_paise)}</span>
-                {#if entry.usd_cents != null}
+                {#if entry.billed_cents != null}
                   <span class="ml-1.5 text-xs text-muted-foreground">
-                    {formatUsd(entry.usd_cents)}
+                    {formatBilled(entry.billed_cents, entry.billed_currency)}
                   </span>
                 {/if}
               </p>

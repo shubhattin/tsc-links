@@ -27,9 +27,10 @@
     EXPENSE_SOURCES_QUERY_KEY,
     expensesQueryKey,
     formatInr,
-    formatUsd,
+    formatBilledTotals,
     listExpenses,
     listSources,
+    sumBilled,
     monthLabel,
     MONTH_PARAM,
     normalizeMonthParam,
@@ -162,17 +163,9 @@
   const monthTotalInr = $derived(
     [...view.main, ...view.inactive].reduce((sum, t) => sum + t.totalInr, 0),
   );
-  const monthTotalUsd = $derived.by(() => {
-    let sum = 0;
-    let has = false;
-    for (const t of [...view.main, ...view.inactive]) {
-      if (t.totalUsd != null) {
-        sum += t.totalUsd;
-        has = true;
-      }
-    }
-    return has ? sum : null;
-  });
+  const monthTotalBilled = $derived(
+    sumBilled([...view.main, ...view.inactive].flatMap((t) => t.totalBilled)),
+  );
   const loading = $derived(sourcesQuery.isPending || expensesQuery.isPending);
   const loadError = $derived(sourcesQuery.error ?? expensesQuery.error);
 
@@ -254,7 +247,7 @@
             </div>
           </div>
 
-          {#if monthTotalInr > 0 || (monthTotalUsd ?? 0) > 0}
+          {#if monthTotalInr > 0 || monthTotalBilled.some((t) => t.cents > 0)}
             <div class="flex items-center gap-3 rounded-2xl border bg-card px-4 py-3 sm:px-5">
               <span class="grid size-9 shrink-0 place-items-center rounded-xl bg-primary/10">
                 <Wallet class="size-4.5 text-primary" />
@@ -265,9 +258,9 @@
                   {formatInr(monthTotalInr)}
                 </p>
               </div>
-              {#if monthTotalUsd != null}
+              {#if monthTotalBilled.length > 0}
                 <p class="shrink-0 text-sm text-muted-foreground tabular-nums">
-                  {formatUsd(monthTotalUsd)}
+                  {formatBilledTotals(monthTotalBilled)}
                 </p>
               {/if}
             </div>

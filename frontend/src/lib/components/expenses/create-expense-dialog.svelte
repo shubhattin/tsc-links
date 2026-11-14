@@ -1,4 +1,5 @@
 <script lang="ts">
+  import BilledAmountField from '$lib/components/expenses/billed-amount-field.svelte';
   import ExpenseDateField from '$lib/components/expenses/expense-date-field.svelte';
   import SourceBrandIcon from '$lib/components/expenses/source-brand-icon.svelte';
   import { Button } from '$lib/components/ui/button';
@@ -17,14 +18,16 @@
   import { Textarea } from '$lib/components/ui/textarea';
   import {
     createExpense,
+    DEFAULT_BILLED_CURRENCY,
     defaultDateForMonth,
     EXPENSE_SOURCES_QUERY_KEY,
     expensesQueryKey,
     listSources,
     monthLabel,
     parseInrToPaise,
-    parseUsdToCents,
+    parseBilledToCents,
     uploadInvoice,
+    type BilledCurrency,
     type CreateExpenseBody,
   } from '$lib/expenses-api';
   import { queryClient } from '$lib/query-client';
@@ -72,7 +75,8 @@
   let date = $state('');
   let label = $state('');
   let note = $state('');
-  let usd = $state('');
+  let billed = $state('');
+  let billedCurrency = $state<BilledCurrency>(DEFAULT_BILLED_CURRENCY);
   let inr = $state('');
   let invoiceLink = $state('');
   let invoiceFile = $state<File | null>(null);
@@ -84,7 +88,8 @@
     date = defaultDateForMonth(month);
     label = '';
     note = '';
-    usd = '';
+    billed = '';
+    billedCurrency = DEFAULT_BILLED_CURRENCY;
     inr = '';
     invoiceLink = '';
     invoiceFile = null;
@@ -97,13 +102,13 @@
   });
 
   const inrPaise = $derived(parseInrToPaise(inr));
-  const usdCents = $derived(usd.trim() ? parseUsdToCents(usd) : undefined);
+  const billedCents = $derived(billed.trim() ? parseBilledToCents(billed) : undefined);
 
   const formError = $derived.by(() => {
     if (!sourceKey) return 'Pick a source';
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return 'Pick a valid date';
     if (inrPaise == null) return 'Enter the final ₹ amount';
-    if (usd.trim() && usdCents == null) return 'Dollar amount looks off';
+    if (billed.trim() && billedCents == null) return 'Billed amount looks off';
     if (note.trim().length > 2000) return 'Note must be at most 2000 characters';
     return null;
   });
@@ -116,7 +121,8 @@
           date,
           label: label.trim() || null,
           note: note.trim() || null,
-          usd_cents: usdCents ?? null,
+          billed_cents: billedCents ?? null,
+          billed_currency: billedCurrency,
           inr_paise: inrPaise ?? 0,
           invoice_link: invoiceLink.trim() || null,
         };
@@ -222,19 +228,12 @@
             aria-invalid={inr.trim() && inrPaise == null ? true : undefined}
           />
         </div>
-        <div class="space-y-1.5">
-          <Label for="expense-usd">
-            Billed ($) <span class="font-normal text-muted-foreground">(optional)</span>
-          </Label>
-          <Input
-            id="expense-usd"
-            inputmode="decimal"
-            autocomplete="off"
-            placeholder="20.00"
-            bind:value={usd}
-            aria-invalid={usd.trim() && usdCents == null ? true : undefined}
-          />
-        </div>
+        <BilledAmountField
+          id="expense-billed"
+          bind:value={billed}
+          bind:currency={billedCurrency}
+          invalid={!!billed.trim() && billedCents == null}
+        />
         <div class="space-y-1.5">
           <Label for="expense-label">
             Label <span class="font-normal text-muted-foreground">(optional)</span>

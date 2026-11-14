@@ -1,4 +1,5 @@
 <script lang="ts">
+  import BilledAmountField from '$lib/components/expenses/billed-amount-field.svelte';
   import ExpenseDateField from '$lib/components/expenses/expense-date-field.svelte';
   import { Button } from '$lib/components/ui/button';
   import {
@@ -14,12 +15,14 @@
   import { Spinner } from '$lib/components/ui/spinner';
   import { Textarea } from '$lib/components/ui/textarea';
   import {
+    DEFAULT_BILLED_CURRENCY,
     deleteInvoice,
     expensesQueryKey,
     parseInrToPaise,
-    parseUsdToCents,
+    parseBilledToCents,
     updateExpense,
     uploadInvoice,
+    type BilledCurrency,
     type ExpenseDto,
     type UpdateExpenseBody,
   } from '$lib/expenses-api';
@@ -40,7 +43,8 @@
   let date = $state('');
   let label = $state('');
   let note = $state('');
-  let usd = $state('');
+  let billed = $state('');
+  let billedCurrency = $state<BilledCurrency>(DEFAULT_BILLED_CURRENCY);
   let inr = $state('');
   let invoiceLink = $state('');
   let removeLink = $state(false);
@@ -53,7 +57,8 @@
     date = entry.date;
     label = entry.label ?? '';
     note = entry.note ?? '';
-    usd = entry.usd_cents != null ? (entry.usd_cents / 100).toString() : '';
+    billed = entry.billed_cents != null ? (entry.billed_cents / 100).toString() : '';
+    billedCurrency = entry.billed_currency;
     inr = (entry.inr_paise / 100).toString();
     invoiceLink = entry.invoice_link ?? '';
     removeLink = false;
@@ -62,7 +67,7 @@
   });
 
   const inrPaise = $derived(parseInrToPaise(inr));
-  const usdCents = $derived(usd.trim() ? parseUsdToCents(usd) : undefined);
+  const billedCents = $derived(billed.trim() ? parseBilledToCents(billed) : undefined);
 
   /** Only send fields that changed (`null` clears optional ones). */
   const changes = $derived.by((): UpdateExpenseBody => {
@@ -71,8 +76,9 @@
     if (date !== entry.date) body.date = date;
     if (label.trim() !== (entry.label ?? '')) body.label = label.trim();
     if (note.trim() !== (entry.note ?? '')) body.note = note.trim();
-    const wantUsd = usd.trim() ? (usdCents ?? entry.usd_cents) : null;
-    if (wantUsd !== entry.usd_cents) body.usd_cents = wantUsd;
+    const wantBilled = billed.trim() ? (billedCents ?? entry.billed_cents) : null;
+    if (wantBilled !== entry.billed_cents) body.billed_cents = wantBilled;
+    if (billedCurrency !== entry.billed_currency) body.billed_currency = billedCurrency;
     if (inrPaise != null && inrPaise !== entry.inr_paise) body.inr_paise = inrPaise;
     if (removeLink) body.invoice_link = null;
     else if (invoiceLink.trim() !== (entry.invoice_link ?? ''))
@@ -84,7 +90,7 @@
     if (!entry) return 'No expense selected';
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return 'Pick a valid date';
     if (inrPaise == null) return 'Enter the final ₹ amount';
-    if (usd.trim() && usdCents == null) return 'Dollar amount looks off';
+    if (billed.trim() && billedCents == null) return 'Billed amount looks off';
     if (note.trim().length > 2000) return 'Note must be at most 2000 characters';
     return null;
   });
@@ -166,18 +172,13 @@
             bind:value={inr}
           />
         </div>
-        <div class="space-y-1.5">
-          <Label for="edit-expense-usd">
-            Billed ($) <span class="font-normal text-muted-foreground">(optional)</span>
-          </Label>
-          <Input
-            id="edit-expense-usd"
-            inputmode="decimal"
-            autocomplete="off"
-            placeholder="Blank clears it"
-            bind:value={usd}
-          />
-        </div>
+        <BilledAmountField
+          id="edit-expense-billed"
+          placeholder="Blank clears it"
+          bind:value={billed}
+          bind:currency={billedCurrency}
+          invalid={!!billed.trim() && billedCents == null}
+        />
       </div>
       <div class="space-y-1.5">
         <Label for="edit-expense-link">
