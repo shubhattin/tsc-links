@@ -477,6 +477,34 @@ async fn source_has_entries_count(state: &AppState, key: &str) -> Result<i64, Db
 
 /* ---------------- expenses ---------------- */
 
+/// Currency of the optional vendor-billed amount (stored as its ISO 4217
+/// code in `expenses.billedCurrency`).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+pub enum BilledCurrency {
+  #[default]
+  #[serde(rename = "USD")]
+  Usd,
+  #[serde(rename = "EUR")]
+  Eur,
+}
+
+impl BilledCurrency {
+  fn code(self) -> &'static str {
+    match self {
+      Self::Usd => "USD",
+      Self::Eur => "EUR",
+    }
+  }
+
+  /// Unknown codes in the DB fall back to USD (the column default).
+  fn from_code(code: &str) -> Self {
+    match code {
+      "EUR" => Self::Eur,
+      _ => Self::Usd,
+    }
+  }
+}
+
 /// Expense row for API responses (`date` is `YYYY-MM-DD`; blobs never leave
 /// the server except through the dedicated download endpoint).
 #[derive(Debug, Serialize, Deserialize, ToSchema, Clone)]
@@ -490,8 +518,10 @@ pub struct ExpenseDto {
   pub label: Option<String>,
   /// Optional short explanatory note.
   pub note: Option<String>,
-  /// Optional charged USD amount, in cents.
-  pub usd_cents: Option<i64>,
+  /// Optional vendor-billed amount, in cents of `billed_currency`.
+  pub billed_cents: Option<i64>,
+  /// Currency of `billed_cents`.
+  pub billed_currency: BilledCurrency,
   /// Final charged INR amount, in paise.
   pub inr_paise: i64,
   pub invoice_link: Option<String>,
@@ -525,8 +555,11 @@ pub struct CreateExpenseBody {
   pub label: Option<String>,
   /// Optional short explanatory note (max 2000 chars).
   pub note: Option<String>,
-  /// Optional charged USD amount, in cents.
-  pub usd_cents: Option<i64>,
+  /// Optional vendor-billed amount, in cents of `billed_currency`.
+  pub billed_cents: Option<i64>,
+  /// Currency of `billed_cents` (defaults to `USD`).
+  #[serde(default)]
+  pub billed_currency: Option<BilledCurrency>,
   /// Final charged INR amount, in paise (required).
   pub inr_paise: i64,
   /// Optional external invoice URL.
@@ -534,7 +567,7 @@ pub struct CreateExpenseBody {
 }
 
 /// `PATCH /api/expenses/{id}` body — omitted fields are unchanged; empty/null
-/// label/link and null `usd_cents` clear the field.
+/// label/link and null `billed_cents` clear the field.
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct UpdateExpenseBody {
   pub source_key: Option<String>,
@@ -545,7 +578,8 @@ pub struct UpdateExpenseBody {
   // `Option<Option<T>>` nulls to `None` by default, hence the custom
   // deserializer (missing → `None`, null → `Some(None)`).
   #[serde(default, deserialize_with = "deserialize_optional_field")]
-  pub usd_cents: Option<Option<i64>>,
+  pub billed_cents: Option<Option<i64>>,
+  pub billed_currency: Option<BilledCurrency>,
   pub inr_paise: Option<i64>,
   #[serde(default, deserialize_with = "deserialize_optional_field")]
   pub invoice_link: Option<Option<String>>,
@@ -642,7 +676,8 @@ fn expense_dto(row: expense::Model, source_name: &str) -> ExpenseDto {
     date: row.date.format("%Y-%m-%d").to_string(),
     label: row.label,
     note: row.note,
-    usd_cents: row.usd_cents,
+    billed_cents: row.billed_cents,
+    billed_currency: BilledCurrency::from_code(&row.billed_currency),
     inr_paise: row.inr_paise,
     invoice_link: row.invoice_link,
     has_invoice: row.invoice_blob.is_some(),
@@ -754,9 +789,9 @@ pub async fn create_expense(
     Ok(n) => n,
     Err(msg) => return bad_request(msg),
   };
-  let usd_cents = match body
-    .usd_cents
-    .map(|c| normalize_money(c, "usd_cents"))
+  let billed_cents = match body
+    .billed_cents
+    .map(|c| normalize_money(c, "billed_cents"))
     .transpose()
   {
     Ok(c) => c,
@@ -791,7 +826,8 @@ pub async fn create_expense(
     date: Set(date),
     label: Set(label),
     note: Set(note),
-    usd_cents: Set(usd_cents),
+    billed_cents: Set(billed_cents),
+    billed_currency: Set(body.billed_currency.unwrap_or_default().code().to_string()),
     inr_paise: Set(inr_paise),
     invoice_link: Set(invoice_link),
     created_by: Set(Some(auth.user_id.clone())),
@@ -888,11 +924,17 @@ pub async fn update_expense(
       Err(msg) => return bad_request(msg),
     }
   }
-  if let Some(usd) = body.usd_cents {
-    match usd.map(|c| normalize_money(c, "usd_cents")).transpose() {
-      Ok(usd_cents) => model.usd_cents = Set(usd_cents),
+  if let Some(billed) = body.billed_cents {
+    match billed
+      .map(|c| normalize_money(c, "billed_cents"))
+      .transpose()
+    {
+      Ok(billed_cents) => model.billed_cents = Set(billed_cents),
       Err(msg) => return bad_request(msg),
     }
+  }
+  if let Some(currency) = body.billed_currency {
+    model.billed_currency = Set(currency.code().to_string());
   }
   if let Some(inr) = body.inr_paise {
     match normalize_money(inr, "inr_paise") {

@@ -7,6 +7,7 @@
  */
 import { client } from '$lib/api/index.js';
 import type {
+  BilledCurrency,
   CreateExpenseBody,
   CreateSourceBody,
   ErrorBody,
@@ -17,6 +18,7 @@ import type {
 } from '$lib/api/index.js';
 
 export type {
+  BilledCurrency,
   CreateExpenseBody,
   CreateSourceBody,
   ExpenseDto,
@@ -171,16 +173,29 @@ export async function invoiceObjectUrl(id: number): Promise<{ url: string; filen
 /* ---------------- money ---------------- */
 
 const inrFormat = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' });
-const usdFormat = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
+const billedFormat: Record<BilledCurrency, Intl.NumberFormat> = {
+  USD: new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }),
+  EUR: new Intl.NumberFormat('en-IE', { style: 'currency', currency: 'EUR' }),
+};
+
+/** Currencies the optional "billed" amount can be in (first = default). */
+export const BILLED_CURRENCIES: readonly BilledCurrency[] = ['USD', 'EUR'];
+export const DEFAULT_BILLED_CURRENCY: BilledCurrency = 'USD';
+export const BILLED_CURRENCY_SYMBOL: Record<BilledCurrency, string> = { USD: '$', EUR: '€' };
 
 /** `175000` paise → `₹1,750.00`. */
 export function formatInr(paise: number): string {
   return inrFormat.format(paise / 100);
 }
 
-/** `2000` cents → `$20.00`. */
-export function formatUsd(cents: number): string {
-  return usdFormat.format(cents / 100);
+/** `2000` cents → `$20.00` / `€20.00`. */
+export function formatBilled(cents: number, currency: BilledCurrency): string {
+  return billedFormat[currency].format(cents / 100);
+}
+
+/** Per-currency billed totals → `$20.00 · €5.00`. */
+export function formatBilledTotals(totals: BilledTotal[]): string {
+  return totals.map((t) => formatBilled(t.cents, t.currency)).join(' · ');
 }
 
 /** `"1750"` / `"1,750.50"` rupees → paise, or `null` when unparseable. */
@@ -190,9 +205,9 @@ export function parseInrToPaise(input: string): number | null {
   return Math.round(parseFloat(cleaned) * 100);
 }
 
-/** `"20"` / `"20.50"` dollars → cents, or `null` when unparseable. */
-export function parseUsdToCents(input: string): number | null {
-  const cleaned = input.replace(/[$,\s]/g, '');
+/** `"20"` / `"20.50"` dollars/euros → cents, or `null` when unparseable. */
+export function parseBilledToCents(input: string): number | null {
+  const cleaned = input.replace(/[$€,\s]/g, '');
   if (cleaned === '') return null;
   if (!/^\d+(\.\d{1,2})?$/.test(cleaned)) return null;
   return Math.round(parseFloat(cleaned) * 100);
@@ -271,13 +286,29 @@ export function defaultDateForMonth(month: string): string {
 
 /* ---------------- aggregation ---------------- */
 
+/** A billed sum in one currency, in cents. */
+export interface BilledTotal {
+  currency: BilledCurrency;
+  cents: number;
+}
+
+/** Sum billed amounts per currency (in `BILLED_CURRENCIES` order, non-empty only). */
+export function sumBilled(items: Iterable<BilledTotal>): BilledTotal[] {
+  const sums = new Map<BilledCurrency, number>();
+  for (const { currency, cents } of items) sums.set(currency, (sums.get(currency) ?? 0) + cents);
+  return BILLED_CURRENCIES.filter((c) => sums.has(c)).map((currency) => ({
+    currency,
+    cents: sums.get(currency)!,
+  }));
+}
+
 export interface SourceMonthTotal {
   source: ExpenseSourceDto;
   entries: ExpenseDto[];
   /** Sum of final INR charges, in paise. */
   totalInr: number;
-  /** Sum of USD charges (present entries only), in cents, or `null` when none. */
-  totalUsd: number | null;
+  /** Sums of billed amounts per currency (entries that have one); empty when none. */
+  totalBilled: BilledTotal[];
   /** Distinct non-empty labels across entries. */
   labels: string[];
 }
@@ -298,14 +329,12 @@ export function totalsBySource(
   return ordered.map((source) => {
     const list = byKey.get(source.key) ?? [];
     let totalInr = 0;
-    let totalUsd = 0;
-    let hasUsd = false;
+    const billed: BilledTotal[] = [];
     const labelSet = new Set<string>();
     for (const entry of list) {
       totalInr += entry.inr_paise;
-      if (entry.usd_cents != null) {
-        totalUsd += entry.usd_cents;
-        hasUsd = true;
+      if (entry.billed_cents != null) {
+        billed.push({ currency: entry.billed_currency, cents: entry.billed_cents });
       }
       if (entry.label) labelSet.add(entry.label);
     }
@@ -313,7 +342,7 @@ export function totalsBySource(
       source,
       entries: list,
       totalInr,
-      totalUsd: hasUsd ? totalUsd : null,
+      totalBilled: sumBilled(billed),
       labels: [...labelSet],
     };
   });

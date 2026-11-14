@@ -6,8 +6,8 @@ use utoipa::openapi::security::{ApiKey, ApiKeyValue, SecurityScheme};
 
 use crate::auth::ErrorBody;
 use crate::routes::expenses::{
-  CreateExpenseBody, CreateSourceBody, ExpenseDto, ExpenseSourceDto, ExpenseSourcesListResponse,
-  ExpensesListResponse, UpdateExpenseBody, UpdateSourceBody,
+  BilledCurrency, CreateExpenseBody, CreateSourceBody, ExpenseDto, ExpenseSourceDto,
+  ExpenseSourcesListResponse, ExpensesListResponse, UpdateExpenseBody, UpdateSourceBody,
 };
 use crate::routes::links::{CreateLinkBody, LinkDto, LinksListResponse, UpdateLinkBody};
 
@@ -23,7 +23,7 @@ use crate::routes::links::{CreateLinkBody, LinkDto, LinksListResponse, UpdateLin
       ErrorBody,
       LinkDto, LinksListResponse, CreateLinkBody, UpdateLinkBody,
       ExpenseSourceDto, ExpenseSourcesListResponse, CreateSourceBody, UpdateSourceBody,
-      ExpenseDto, ExpensesListResponse, CreateExpenseBody, UpdateExpenseBody,
+      BilledCurrency, ExpenseDto, ExpensesListResponse, CreateExpenseBody, UpdateExpenseBody,
     )),
     modifiers(&SecurityAddon),
     tags(
